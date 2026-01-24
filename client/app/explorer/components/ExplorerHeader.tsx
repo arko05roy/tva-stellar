@@ -24,7 +24,7 @@ export function ExplorerHeader() {
               chainId: `0x${TVA_CHAIN_ID.toString(16)}`,
               chainName: "TVA Testnet",
               nativeCurrency: { name: "XLM", symbol: "XLM", decimals: 18 },
-              rpcUrls: [window.location.origin + "/api/rpc"],
+              rpcUrls: [process.env.NEXT_PUBLIC_TVA_RPC_URL || "http://localhost:8545"],
               blockExplorerUrls: [window.location.origin + "/explorer"],
             }],
           });

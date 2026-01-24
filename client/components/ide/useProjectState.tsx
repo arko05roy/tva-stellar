@@ -515,7 +515,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
                             chainId: TVA_CHAIN_ID_HEX,
                             chainName: "TVA Testnet",
                             nativeCurrency: { name: "XLM", symbol: "XLM", decimals: 18 },
-                            rpcUrls: [window.location.origin + "/api/rpc"],
+                            rpcUrls: [process.env.NEXT_PUBLIC_TVA_RPC_URL || "http://localhost:8545"],
                             blockExplorerUrls: [window.location.origin + "/explorer"],
                         }],
                     });
