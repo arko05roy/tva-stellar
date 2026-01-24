@@ -1,7 +1,7 @@
 "use client";
 
 import { useQueries } from "@tanstack/react-query";
-import { getRpcClient } from "./useTvaRpc";
+import { getRpcClient, parseBlock } from "./useTvaRpc";
 import type { EvmBlock } from "@tva-protocol/sdk/types";
 
 /**
@@ -18,7 +18,8 @@ export function useRecentTransactions(latestBlockNumber: number | undefined, cou
       queryKey: ["block", num, true], // include_txs = true
       queryFn: async () => {
         const rpc = getRpcClient();
-        return rpc.getBlockByNumber(num, true);
+        const raw = await rpc.getBlockByNumber(num, true);
+        return parseBlock(raw);
       },
       staleTime: 10000, // Refresh every 10 seconds for recent blocks
     })),

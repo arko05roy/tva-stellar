@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery, useQueries } from "@tanstack/react-query";
-import { getRpcClient } from "./useTvaRpc";
+import { getRpcClient, parseBlock } from "./useTvaRpc";
 import type { EvmBlock } from "@tva-protocol/sdk/types";
 
 /**
@@ -13,8 +13,8 @@ export function useBlock(blockNumber: number | null, includeTransactions: boolea
     queryFn: async () => {
       if (blockNumber === null) return null;
       const rpc = getRpcClient();
-      const block = await rpc.getBlockByNumber(blockNumber, includeTransactions);
-      return block;
+      const raw = await rpc.getBlockByNumber(blockNumber, includeTransactions);
+      return parseBlock(raw);
     },
     enabled: blockNumber !== null,
   });
@@ -29,8 +29,8 @@ export function useBlockByHash(blockHash: string | null, includeTransactions: bo
     queryFn: async () => {
       if (!blockHash) return null;
       const rpc = getRpcClient();
-      const block = await rpc.getBlockByHash(blockHash, includeTransactions);
-      return block;
+      const raw = await rpc.getBlockByHash(blockHash, includeTransactions);
+      return parseBlock(raw);
     },
     enabled: !!blockHash,
   });
@@ -49,7 +49,8 @@ export function useRecentBlocks(latestBlockNumber: number | undefined, count: nu
       queryKey: ["block", num, false],
       queryFn: async () => {
         const rpc = getRpcClient();
-        return rpc.getBlockByNumber(num, false);
+        const raw = await rpc.getBlockByNumber(num, false);
+        return parseBlock(raw);
       },
       staleTime: Infinity, // Historical blocks don't change
     })),
@@ -75,7 +76,8 @@ export function useBlocksPage(startBlock: number, count: number = 10) {
       queryKey: ["block", num, false],
       queryFn: async () => {
         const rpc = getRpcClient();
-        return rpc.getBlockByNumber(num, false);
+        const raw = await rpc.getBlockByNumber(num, false);
+        return parseBlock(raw);
       },
       staleTime: Infinity,
     })),

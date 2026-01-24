@@ -476,6 +476,29 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         addLog({ type: "system", msg: "Connecting wallet..." });
         try {
             if (typeof window !== "undefined" && (window as any).ethereum) {
+                // Add TVA network to MetaMask
+                const TVA_CHAIN_ID_HEX = "0x54564100";
+                try {
+                    await (window as any).ethereum.request({
+                        method: "wallet_addEthereumChain",
+                        params: [{
+                            chainId: TVA_CHAIN_ID_HEX,
+                            chainName: "TVA Testnet",
+                            nativeCurrency: { name: "XLM", symbol: "XLM", decimals: 18 },
+                            rpcUrls: [window.location.origin + "/api/rpc"],
+                            blockExplorerUrls: [window.location.origin + "/explorer"],
+                        }],
+                    });
+                } catch { /* network may already exist */ }
+
+                // Switch to TVA network
+                try {
+                    await (window as any).ethereum.request({
+                        method: "wallet_switchEthereumChain",
+                        params: [{ chainId: TVA_CHAIN_ID_HEX }],
+                    });
+                } catch { /* user rejected switch */ }
+
                 const accounts = await (window as any).ethereum.request({ method: "eth_requestAccounts" });
                 if (accounts && accounts.length > 0) {
                     setWalletAddress(accounts[0]);
@@ -487,6 +510,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
                     const balanceInEth = parseInt(balance, 16) / 1e18;
                     setWalletBalance(balanceInEth.toFixed(4));
                     addLog({ type: "success", msg: `Wallet connected: ${accounts[0].slice(0, 6)}...${accounts[0].slice(-4)}` });
+                    addLog({ type: "info", msg: "Network: TVA Testnet (Stellar)" });
                 }
             } else {
                 addLog({ type: "warning", msg: "No wallet detected. Install MetaMask or a compatible wallet." });
