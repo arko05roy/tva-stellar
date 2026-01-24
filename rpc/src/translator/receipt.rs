@@ -182,6 +182,68 @@ pub fn build_transaction_from_stellar(
     })
 }
 
+/// Build an EVM transaction object from a Horizon transaction record.
+pub fn build_transaction_from_horizon(
+    horizon_tx: &serde_json::Value,
+    ledger_sequence: u64,
+    tx_index: u32,
+) -> Result<EvmTransaction> {
+    let tx_hash = horizon_tx["hash"]
+        .as_str()
+        .unwrap_or("")
+        .to_string();
+    
+    let source_account = horizon_tx["source_account"]
+        .as_str()
+        .unwrap_or("")
+        .to_string();
+    
+    // Convert Stellar account to EVM address (simplified - would use AccountRegistry in production)
+    let from_address = stellar_account_to_evm_address(&source_account);
+    
+    // Try to extract contract invocation from operations
+    let to_address = horizon_tx["operations"]
+        .as_array()
+        .and_then(|ops| ops.first())
+        .and_then(|op| {
+            op["function"].as_str()
+                .or_else(|| op["contract_id"].as_str())
+                .map(|_| format!("0x{}", "0".repeat(40))) // Placeholder
+        });
+
+    let block_number = format!("0x{:x}", ledger_sequence);
+    let block_hash = crate::emulator::block::ledger_to_block_hash(ledger_sequence);
+
+    Ok(EvmTransaction {
+        hash: ensure_0x_prefix(&tx_hash),
+        nonce: "0x0".to_string(),
+        block_hash,
+        block_number,
+        transaction_index: format!("0x{:x}", tx_index),
+        from: ensure_0x_prefix(&from_address),
+        to: to_address.as_deref().map(ensure_0x_prefix),
+        value: "0x0".to_string(),
+        gas_price: "0x3b9aca00".to_string(),
+        gas: "0x5208".to_string(),
+        input: "0x".to_string(),
+        v: "0x1b".to_string(),
+        r: format!("0x{}", "0".repeat(64)),
+        s: format!("0x{}", "0".repeat(64)),
+        tx_type: "0x0".to_string(),
+    })
+}
+
+/// Convert a Stellar account ID to an EVM address (simplified).
+/// In production, this would query the AccountRegistry contract.
+fn stellar_account_to_evm_address(account_id: &str) -> String {
+    use sha3::{Digest, Keccak256};
+    let mut hasher = Keccak256::new();
+    hasher.update(b"TVA_ACCOUNT_");
+    hasher.update(account_id.as_bytes());
+    let hash = hasher.finalize();
+    format!("0x{}", hex::encode(&hash[..20]))
+}
+
 /// Build a "pending" receipt for a transaction that was submitted but not yet confirmed.
 pub fn build_pending_receipt(tx_hash_hex: &str) -> EvmTransactionReceipt {
     EvmTransactionReceipt {

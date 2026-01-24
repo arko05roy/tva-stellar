@@ -48,23 +48,69 @@ pub async fn get_block_by_number(
     let target_ledger = parse_block_number(block_param, latest_ledger.sequence);
 
     debug!(
-        "eth_getBlockByNumber: param={}, target_ledger={}",
-        block_param, target_ledger
+        "eth_getBlockByNumber: param={}, target_ledger={}, include_txs={}",
+        block_param, target_ledger, include_txs
     );
 
-    // Get base fee for the block
-    let base_fee = client.get_base_fee().await.unwrap_or(100);
-
-    // Estimate close time (Stellar ~5 second blocks)
+    // Get real ledger info from Horizon
+    let (tx_count, close_time) = client.get_ledger_info(target_ledger).await.unwrap_or((0, 0));
+    
+    // If close_time is 0, estimate it
     let time_diff = (latest_ledger.sequence - target_ledger) * 5;
     let now = chrono::Utc::now().timestamp() as u64;
-    let close_time = if target_ledger == latest_ledger.sequence {
+    let close_time = if close_time > 0 {
+        close_time
+    } else if target_ledger == latest_ledger.sequence {
         now
     } else {
         now.saturating_sub(time_diff)
     };
 
-    let block = EvmBlock::from_ledger(target_ledger, close_time, 0, base_fee, include_txs);
+    // Get base fee for the block
+    let base_fee = client.get_base_fee().await.unwrap_or(100);
+
+    // Fetch real transactions from Horizon
+    let transactions = if tx_count > 0 {
+        let horizon_txs = client.get_ledger_transactions(target_ledger).await.unwrap_or_default();
+        if include_txs {
+            // Full transaction objects
+            horizon_txs
+                .iter()
+                .enumerate()
+                .filter_map(|(idx, tx)| {
+                    crate::translator::receipt::build_transaction_from_horizon(
+                        tx,
+                        target_ledger,
+                        idx as u32,
+                    )
+                    .ok()
+                    .map(|evm_tx| serde_json::to_value(evm_tx).ok())
+                    .flatten()
+                })
+                .collect()
+        } else {
+            // Just transaction hashes
+            horizon_txs
+                .iter()
+                .filter_map(|tx| {
+                    tx.get("hash")
+                        .or_else(|| tx.get("transactionHash"))
+                        .cloned()
+                })
+                .collect()
+        }
+    } else {
+        Vec::new()
+    };
+
+    let block = EvmBlock::from_ledger(
+        target_ledger,
+        close_time,
+        tx_count,
+        base_fee,
+        include_txs,
+        transactions,
+    );
 
     Ok(serde_json::to_value(&block)?)
 }
@@ -82,10 +128,46 @@ pub async fn get_block_by_hash(
         .unwrap_or(false);
 
     let latest = client.get_latest_ledger().await?;
+    let (tx_count, close_time) = client.get_ledger_info(latest.sequence).await.unwrap_or((0, 0));
     let base_fee = client.get_base_fee().await.unwrap_or(100);
     let now = chrono::Utc::now().timestamp() as u64;
+    let close_time = if close_time > 0 { close_time } else { now };
 
-    let block = EvmBlock::from_ledger(latest.sequence, now, 0, base_fee, include_txs);
+    // Fetch real transactions from Horizon
+    let transactions = if tx_count > 0 {
+        let horizon_txs = client.get_ledger_transactions(latest.sequence).await.unwrap_or_default();
+        if include_txs {
+            // Full transaction objects
+            horizon_txs
+                .iter()
+                .enumerate()
+                .filter_map(|(idx, tx)| {
+                    crate::translator::receipt::build_transaction_from_horizon(
+                        tx,
+                        latest.sequence,
+                        idx as u32,
+                    )
+                    .ok()
+                    .map(|evm_tx| serde_json::to_value(evm_tx).ok())
+                    .flatten()
+                })
+                .collect()
+        } else {
+            // Just transaction hashes
+            horizon_txs
+                .iter()
+                .filter_map(|tx| {
+                    tx.get("hash")
+                        .or_else(|| tx.get("transactionHash"))
+                        .cloned()
+                })
+                .collect()
+        }
+    } else {
+        Vec::new()
+    };
+
+    let block = EvmBlock::from_ledger(latest.sequence, close_time, tx_count, base_fee, include_txs, transactions);
     Ok(serde_json::to_value(&block)?)
 }
 

@@ -58,6 +58,7 @@ impl EvmBlock {
         tx_count: u32,
         base_fee: u64,
         include_txs: bool,
+        transactions: Vec<serde_json::Value>,
     ) -> Self {
         let number = format!("0x{:x}", ledger_sequence);
         let hash = ledger_to_block_hash(ledger_sequence);
@@ -73,12 +74,20 @@ impl EvmBlock {
         let gas_used = format!("0x{:x}", tx_count as u64 * 21000);
         let gas_limit = "0x1c9c380".to_string(); // 30M gas limit
 
-        let transactions = if include_txs {
-            // Full transaction objects would go here
-            serde_json::Value::Array(Vec::new())
+        let transactions_value = if include_txs {
+            // Full transaction objects
+            serde_json::Value::Array(transactions)
         } else {
             // Just transaction hashes
-            serde_json::Value::Array(Vec::new())
+            let hashes: Vec<serde_json::Value> = transactions
+                .iter()
+                .filter_map(|tx| {
+                    tx.get("hash")
+                        .or_else(|| tx.get("transactionHash"))
+                        .cloned()
+                })
+                .collect();
+            serde_json::Value::Array(hashes)
         };
 
         let base_fee_per_gas = format!("0x{:x}", base_fee * 100); // Convert stroops to gwei-like
@@ -110,7 +119,7 @@ impl EvmBlock {
             gas_limit,
             gas_used,
             timestamp,
-            transactions,
+            transactions: transactions_value,
             uncles: Vec::new(),
             base_fee_per_gas,
             mix_hash: format!("0x{}", "0".repeat(64)),
@@ -119,13 +128,13 @@ impl EvmBlock {
 
     /// Create a block representing the "latest" state.
     pub fn latest(ledger_sequence: u64, close_time: u64, base_fee: u64) -> Self {
-        Self::from_ledger(ledger_sequence, close_time, 0, base_fee, false)
+        Self::from_ledger(ledger_sequence, close_time, 0, base_fee, false, Vec::new())
     }
 
     /// Create a "pending" block.
     pub fn pending(ledger_sequence: u64) -> Self {
         let now = chrono::Utc::now().timestamp() as u64;
-        Self::from_ledger(ledger_sequence + 1, now, 0, 100, false)
+        Self::from_ledger(ledger_sequence + 1, now, 0, 100, false, Vec::new())
     }
 }
 
@@ -182,7 +191,7 @@ mod tests {
 
     #[test]
     fn test_evm_block_creation() {
-        let block = EvmBlock::from_ledger(42, 1700000000, 5, 100, false);
+        let block = EvmBlock::from_ledger(42, 1700000000, 5, 100, false, Vec::new());
         assert_eq!(block.number, "0x2a");
         assert_eq!(block.timestamp, "0x6553f100");
         assert!(block.hash.starts_with("0x"));

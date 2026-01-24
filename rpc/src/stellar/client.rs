@@ -257,6 +257,79 @@ impl SorobanClient {
         Ok(fee)
     }
 
+    /// Get transactions for a specific ledger from Horizon API.
+    pub async fn get_ledger_transactions(&self, ledger_sequence: u64) -> Result<Vec<serde_json::Value>> {
+        let horizon_url = if self.rpc_url.contains("testnet") {
+            "https://horizon-testnet.stellar.org"
+        } else {
+            "https://horizon.stellar.org"
+        };
+
+        let url = format!("{}/ledgers/{}/transactions?limit=200&order=asc", horizon_url, ledger_sequence);
+        debug!("Fetching transactions for ledger {} from {}", ledger_sequence, url);
+
+        let response = self
+            .http_client
+            .get(&url)
+            .send()
+            .await
+            .context("Failed to query Horizon for ledger transactions")?;
+
+        if !response.status().is_success() {
+            debug!("Horizon returned {} for ledger {} transactions", response.status(), ledger_sequence);
+            return Ok(Vec::new());
+        }
+
+        let body: serde_json::Value = response.json().await?;
+        let transactions = body["_embedded"]["records"]
+            .as_array()
+            .cloned()
+            .unwrap_or_default();
+
+        debug!("Found {} transactions in ledger {}", transactions.len(), ledger_sequence);
+        Ok(transactions)
+    }
+
+    /// Get ledger information including transaction count from Horizon API.
+    pub async fn get_ledger_info(&self, ledger_sequence: u64) -> Result<(u32, u64)> {
+        let horizon_url = if self.rpc_url.contains("testnet") {
+            "https://horizon-testnet.stellar.org"
+        } else {
+            "https://horizon.stellar.org"
+        };
+
+        let url = format!("{}/ledgers/{}", horizon_url, ledger_sequence);
+        debug!("Fetching ledger info for {} from {}", ledger_sequence, url);
+
+        let response = self
+            .http_client
+            .get(&url)
+            .send()
+            .await
+            .context("Failed to query Horizon for ledger info")?;
+
+        if !response.status().is_success() {
+            debug!("Ledger {} not found, returning defaults", ledger_sequence);
+            return Ok((0, 0));
+        }
+
+        let body: serde_json::Value = response.json().await?;
+        let tx_count = body["transaction_count"]
+            .as_u64()
+            .unwrap_or(0) as u32;
+        let close_time = body["closed_at"]
+            .as_str()
+            .and_then(|s| {
+                chrono::DateTime::parse_from_rfc3339(s)
+                    .ok()
+                    .map(|dt| dt.timestamp() as u64)
+            })
+            .unwrap_or(0);
+
+        debug!("Ledger {}: {} transactions, closed at {}", ledger_sequence, tx_count, close_time);
+        Ok((tx_count, close_time))
+    }
+
     /// Wait for a transaction to be confirmed, polling getTransaction.
     pub async fn wait_for_transaction(
         &self,

@@ -7,10 +7,11 @@ interface TransactionCardProps {
   tx: {
     hash: string;
     from: string;
-    to: string | null;
-    value: string;
-    blockNumber: number;
+    to?: string | null;
+    value?: string;
+    blockNumber: number | string;
     timestamp?: number;
+    transactionIndex?: string;
   };
   compact?: boolean;
 }
@@ -41,7 +42,7 @@ export function TransactionCard({ tx, compact = false }: TransactionCardProps) {
               {truncateHash(tx.hash)}
             </div>
             <div className="text-xs text-black/40">
-              {tx.timestamp ? formatRelativeTime(tx.timestamp) : `Block ${tx.blockNumber}`}
+              {tx.timestamp ? formatRelativeTime(tx.timestamp) : `Block ${typeof tx.blockNumber === 'string' ? parseInt(tx.blockNumber, 16) : tx.blockNumber}`}
             </div>
           </div>
         </div>
@@ -86,7 +87,7 @@ export function TransactionCard({ tx, compact = false }: TransactionCardProps) {
           <div>
             <div className="font-mono text-sm mb-1">{truncateHash(tx.hash, 12)}</div>
             <div className="text-xs text-black/40">
-              Block {tx.blockNumber.toLocaleString()}
+              Block {typeof tx.blockNumber === 'string' ? parseInt(tx.blockNumber, 16).toLocaleString() : tx.blockNumber.toLocaleString()}
             </div>
           </div>
         </div>
@@ -115,7 +116,7 @@ export function TransactionCard({ tx, compact = false }: TransactionCardProps) {
         <div>
           <div className="text-xs text-black/40 uppercase tracking-wider mb-1">Value</div>
           <div className="font-mono text-sm">
-            {formatWei(BigInt(tx.value))} ETH
+            {tx.value ? formatWei(BigInt(tx.value)) : "0"} ETH
           </div>
         </div>
       </div>
