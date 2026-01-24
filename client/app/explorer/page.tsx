@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ExplorerHeader } from "./components/ExplorerHeader";
 import { BlockCard } from "./components/BlockCard";
@@ -8,7 +9,27 @@ import { useLatestBlock } from "./hooks/useLatestBlock";
 import { useRecentBlocks } from "./hooks/useBlocks";
 import { useRecentTransactions } from "./hooks/useTransactions";
 import { TVA_CHAIN_ID, MAX_RECENT_BLOCKS } from "./lib/constants";
-import { formatBlockNumberHex } from "./lib/formatter";
+
+interface Deployment {
+  timestamp: string;
+  contractName: string;
+  contractId: string;
+  explorerUrl?: string;
+}
+
+function useDeployments() {
+  const [deployments, setDeployments] = useState<Deployment[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    fetch("/api/deployments")
+      .then((r) => r.json())
+      .then((data) => { setDeployments(data.deployments || []); setIsLoading(false); })
+      .catch(() => setIsLoading(false));
+  }, []);
+
+  return { deployments, isLoading };
+}
 
 export default function ExplorerHome() {
   const { data: latestBlockNumber, isLoading: isLoadingLatest } = useLatestBlock();
@@ -20,6 +41,7 @@ export default function ExplorerHome() {
     latestBlockNumber,
     15
   );
+  const { deployments, isLoading: isLoadingDeployments } = useDeployments();
 
   return (
     <div className="min-h-screen bg-white">
@@ -156,6 +178,56 @@ export default function ExplorerHome() {
           </div>
         </div>
       </div>
+
+      {/* Deployed Contracts Section */}
+      {deployments.length > 0 && (
+        <div className="max-w-7xl mx-auto px-6 pb-12">
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-xl font-bold">Deployed Contracts</h2>
+            <span className="text-sm text-black/40">{deployments.length} contracts</span>
+          </div>
+          <div className="bg-white rounded-xl border border-black/10 divide-y divide-black/5">
+            {deployments.slice(0, 10).map((dep, i) => (
+              <div key={i} className="flex items-center justify-between px-5 py-4 hover:bg-black/[0.02] transition-colors">
+                <div className="flex items-center gap-4">
+                  <div className="w-9 h-9 rounded-lg bg-[#FFC800]/10 border border-[#FFC800]/20 flex items-center justify-center">
+                    <span className="text-[#FFC800] text-xs font-bold">SOL</span>
+                  </div>
+                  <div>
+                    <div className="font-medium text-sm">{dep.contractName}</div>
+                    <div className="text-xs text-black/40 font-mono mt-0.5">
+                      {dep.contractId.slice(0, 8)}...{dep.contractId.slice(-6)}
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-4">
+                  <span className="text-xs text-black/40">
+                    {new Date(dep.timestamp).toLocaleDateString()}
+                  </span>
+                  {dep.explorerUrl ? (
+                    <a href={dep.explorerUrl} target="_blank" rel="noopener noreferrer"
+                      className="text-xs text-[#0055ff] hover:underline flex items-center gap-1">
+                      View
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3" />
+                      </svg>
+                    </a>
+                  ) : (
+                    <a href={`https://stellar.expert/explorer/testnet/contract/${dep.contractId}`}
+                      target="_blank" rel="noopener noreferrer"
+                      className="text-xs text-[#0055ff] hover:underline flex items-center gap-1">
+                      View
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3" />
+                      </svg>
+                    </a>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

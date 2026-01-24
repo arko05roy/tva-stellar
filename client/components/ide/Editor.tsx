@@ -410,9 +410,9 @@ export default function CodeEditor() {
                     { token: '', foreground: 'E5E5E5' },
                 ],
                 colors: {
-                    'editor.background': '#0a0a0a',
+                    'editor.background': '#000000',
                     'editor.foreground': '#e0e0e0',
-                    'editor.lineHighlightBackground': '#1a1a1a',
+                    'editor.lineHighlightBackground': '#0a0a0a',
                     'editor.selectionBackground': '#FFC80030',
                     'editor.inactiveSelectionBackground': '#FFC80015',
                     'editorLineNumber.foreground': '#4a4a4a',
@@ -424,10 +424,10 @@ export default function CodeEditor() {
                     'scrollbarSlider.background': '#2a2a2a80',
                     'scrollbarSlider.hoverBackground': '#3a3a3a80',
                     'scrollbarSlider.activeBackground': '#4a4a4a80',
-                    'minimap.background': '#050505',
-                    'editorGutter.background': '#0a0a0a',
-                    'editorIndentGuide.background': '#1a1a1a',
-                    'editorIndentGuide.activeBackground': '#2a2a2a',
+                    'minimap.background': '#000000',
+                    'editorGutter.background': '#000000',
+                    'editorIndentGuide.background': '#111111',
+                    'editorIndentGuide.activeBackground': '#222222',
                 }
             });
         }
@@ -438,7 +438,7 @@ export default function CodeEditor() {
             <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
-                className="flex-1 bg-[#0a0a0a] flex items-center justify-center relative overflow-hidden"
+                className="flex-1 bg-[#000000] flex items-center justify-center relative overflow-hidden"
             >
                 {/* Background grid pattern */}
                 <div className="absolute inset-0 opacity-[0.02]"
@@ -523,14 +523,14 @@ export default function CodeEditor() {
         <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            className="flex-1 h-full overflow-hidden bg-[#0a0a0a] flex flex-col"
+            className="flex-1 h-full overflow-hidden bg-[#000000] flex flex-col"
         >
             {/* Tab Bar */}
             <div className="h-[40px] bg-[#050505] flex items-end overflow-x-auto select-none border-b border-[#1a1a1a]">
                 <motion.div
                     initial={{ opacity: 0, y: -10 }}
                     animate={{ opacity: 1, y: 0 }}
-                    className="h-[40px] px-4 min-w-[140px] max-w-[220px] bg-[#0a0a0a] text-white text-[13px] flex items-center justify-between gap-3 border-t-2 border-[#FFC800] border-r border-r-[#1a1a1a] group"
+                    className="h-[40px] px-4 min-w-[140px] max-w-[220px] bg-[#000000] text-white text-[13px] flex items-center justify-between gap-3 border-t-2 border-[#FFC800] border-r border-r-[#1a1a1a] group"
                 >
                     <span className="flex items-center gap-2 truncate">
                         <span
@@ -553,7 +553,7 @@ export default function CodeEditor() {
             </div>
 
             {/* Breadcrumb */}
-            <div className="h-[28px] bg-[#0a0a0a] flex items-center px-4 text-[12px] text-[#4a4a4a] border-b border-[#111111] gap-1">
+            <div className="h-[28px] bg-[#000000] flex items-center px-4 text-[12px] text-[#4a4a4a] border-b border-[#111111] gap-1">
                 <span className="hover:text-[#808080] cursor-pointer transition-colors">src</span>
                 <span>/</span>
                 <span className="text-[#808080]">{activeFile.name}</span>
@@ -609,7 +609,7 @@ export default function CodeEditor() {
                         },
                     }}
                     loading={
-                        <div className="flex-1 bg-[#0a0a0a] flex items-center justify-center">
+                        <div className="flex-1 bg-[#000000] flex items-center justify-center">
                             <motion.div
                                 className="w-8 h-8 rounded-full border-2 border-[#FFC800] border-t-transparent"
                                 animate={{ rotate: 360 }}

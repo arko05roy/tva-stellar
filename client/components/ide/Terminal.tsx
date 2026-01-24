@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useRef, useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { useProject } from "./useProjectState";
 
 const ChevronDownIcon = () => (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -22,70 +23,83 @@ const MaximizeIcon = () => (
     </svg>
 );
 
-type LogType = 'success' | 'command' | 'info' | 'warning' | 'error';
-
-interface LogEntry {
-    type: LogType;
-    prefix: string;
-    msg: string;
-    timestamp?: string;
-}
-
 export default function Terminal() {
+    const { logs, clearLogs } = useProject();
     const [isCollapsed, setIsCollapsed] = useState(false);
     const [activeTab, setActiveTab] = useState<'output' | 'problems' | 'debug'>('output');
+    const scrollRef = useRef<HTMLDivElement>(null);
 
-    const logs: LogEntry[] = [
-        { type: 'success', prefix: '✓', msg: 'Initializing Stellar workspace... done', timestamp: '00:00:01' },
-        { type: 'command', prefix: '$', msg: 'stellar build --network testnet', timestamp: '00:00:02' },
-        { type: 'info', prefix: '→', msg: 'Fetching dependencies from stellar-sdk...', timestamp: '00:00:03' },
-        { type: 'info', prefix: '→', msg: 'Compiling contract `counter` (0.8s)', timestamp: '00:00:04' },
-        { type: 'info', prefix: '→', msg: 'Emitting WASM to build/counter.wasm', timestamp: '00:00:05' },
-        { type: 'success', prefix: '✓', msg: 'Build pipeline ready. Ship your contracts!', timestamp: '00:00:06' },
-    ];
+    useEffect(() => {
+        if (scrollRef.current) {
+            scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+        }
+    }, [logs]);
 
-    const getLogStyles = (type: LogType) => {
+    const getLogStyles = (type: string) => {
         switch (type) {
             case 'success':
                 return { prefix: 'text-[#22C55E]', msg: 'text-[#22C55E]' };
-            case 'command':
-                return { prefix: 'text-[#FFC800]', msg: 'text-white' };
-            case 'warning':
-                return { prefix: 'text-[#F59E0B]', msg: 'text-[#F59E0B]' };
             case 'error':
                 return { prefix: 'text-[#EF4444]', msg: 'text-[#EF4444]' };
+            case 'warning':
+                return { prefix: 'text-[#F59E0B]', msg: 'text-[#F59E0B]' };
+            case 'building':
+                return { prefix: 'text-[#FFC800]', msg: 'text-[#FFC800]' };
+            case 'verifying':
+                return { prefix: 'text-[#9B7FFF]', msg: 'text-[#9B7FFF]' };
+            case 'deploying':
+                return { prefix: 'text-[#3B82F6]', msg: 'text-[#3B82F6]' };
+            case 'system':
+                return { prefix: 'text-[#FFC800]', msg: 'text-[#808080]' };
+            case 'info':
             default:
-                return { prefix: 'text-[#4a4a4a]', msg: 'text-[#808080]' };
+                return { prefix: 'text-[#333]', msg: 'text-[#666]' };
         }
     };
 
+    const getLogPrefix = (type: string) => {
+        switch (type) {
+            case 'success': return '[ok]';
+            case 'error': return '[!!]';
+            case 'warning': return '[--]';
+            case 'building': return '[>>]';
+            case 'verifying': return '[??]';
+            case 'deploying': return '[=>]';
+            case 'system': return '[tv]';
+            case 'info':
+            default: return '   ';
+        }
+    };
+
+    const errorCount = logs.filter(l => l.type === 'error').length;
+
     return (
         <motion.div
-            className="h-full bg-[#050505] flex flex-col font-mono text-[13px] border-t border-[#1a1a1a]"
+            className="h-full bg-[#050505] flex flex-col font-mono text-[11px] border-t border-[#141414]"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
         >
             {/* Terminal Header */}
-            <div className="flex items-center justify-between h-[36px] px-3 border-b border-[#1a1a1a] bg-[#0a0a0a]">
+            <div className="flex items-center justify-between h-[30px] px-3 border-b border-[#141414] bg-[#080808] shrink-0">
                 {/* Tabs */}
                 <div className="flex items-center gap-1">
                     {[
                         { id: 'output', label: 'Output' },
-                        { id: 'problems', label: 'Problems', badge: 0 },
+                        { id: 'problems', label: 'Problems', badge: errorCount },
                         { id: 'debug', label: 'Debug Console' },
                     ].map((tab) => (
                         <button
                             key={tab.id}
-                            onClick={() => setActiveTab(tab.id as any)}
-                            className={`px-3 py-1.5 text-[11px] font-medium rounded transition-colors flex items-center gap-1.5
+                            onClick={() => setActiveTab(tab.id as typeof activeTab)}
+                            className={`px-2.5 py-1 text-[10px] font-semibold tracking-wide uppercase rounded transition-colors flex items-center gap-1.5
                                 ${activeTab === tab.id
-                                    ? 'text-white bg-[#1a1a1a]'
-                                    : 'text-[#4a4a4a] hover:text-[#808080]'
+                                    ? 'text-white bg-[#141414]'
+                                    : 'text-[#444] hover:text-[#888]'
                                 }`}
                         >
                             {tab.label}
-                            {tab.badge !== undefined && (
-                                <span className={`px-1.5 py-0.5 text-[9px] rounded-full ${activeTab === tab.id ? 'bg-[#2a2a2a] text-[#808080]' : 'bg-[#1a1a1a] text-[#4a4a4a]'
+                            {tab.badge !== undefined && tab.badge > 0 && (
+                                <span className={`px-1.5 py-0.5 text-[9px] rounded-full ${activeTab === tab.id ? 'bg-red-900/50 text-red-400' : 'bg-[#1a1a1a] text-[#4a4a4a]'
                                     }`}>
                                     {tab.badge}
                                 </span>
@@ -101,6 +115,7 @@ export default function Terminal() {
                         whileHover={{ scale: 1.1 }}
                         whileTap={{ scale: 0.9 }}
                         title="Clear"
+                        onClick={clearLogs}
                     >
                         <ClearIcon />
                     </motion.button>
@@ -135,50 +150,58 @@ export default function Terminal() {
                         transition={{ duration: 0.2 }}
                         className="flex-1 overflow-hidden"
                     >
-                        <div className="h-full overflow-y-auto p-3 space-y-0.5">
-                            {logs.map((log, i) => {
+                        <div ref={scrollRef} className="h-full overflow-y-auto p-3 space-y-0.5">
+                            {activeTab === 'output' && logs.map((log, i) => {
                                 const styles = getLogStyles(log.type);
                                 return (
-                                    <motion.div
+                                    <div
                                         key={i}
-                                        initial={{ opacity: 0, x: -10 }}
-                                        animate={{ opacity: 1, x: 0 }}
-                                        transition={{ delay: i * 0.05 }}
                                         className="flex items-start group hover:bg-[#0a0a0a] rounded px-2 py-0.5 -mx-2"
                                     >
-                                        {/* Timestamp */}
-                                        <span className="w-16 text-[10px] text-[#2a2a2a] group-hover:text-[#4a4a4a] transition-colors font-mono flex-shrink-0">
-                                            {log.timestamp}
-                                        </span>
-
                                         {/* Prefix */}
-                                        <span className={`w-6 flex-shrink-0 font-bold ${styles.prefix}`}>
-                                            {log.prefix}
+                                        <span className={`w-8 flex-shrink-0 ${styles.prefix}`}>
+                                            {getLogPrefix(log.type)}
                                         </span>
 
                                         {/* Message */}
-                                        <span className={`flex-1 ${styles.msg}`}>
+                                        <span className={`flex-1 whitespace-pre-wrap break-all ${styles.msg}`}>
                                             {log.msg}
                                         </span>
-                                    </motion.div>
+                                    </div>
                                 );
                             })}
 
+                            {activeTab === 'problems' && (
+                                logs.filter(l => l.type === 'error' || l.type === 'warning').length === 0
+                                    ? <div className="text-[#4a4a4a] text-center py-4">No problems detected</div>
+                                    : logs.filter(l => l.type === 'error' || l.type === 'warning').map((log, i) => {
+                                        const styles = getLogStyles(log.type);
+                                        return (
+                                            <div key={i} className="flex items-start px-2 py-0.5">
+                                                <span className={`w-8 flex-shrink-0 ${styles.prefix}`}>
+                                                    {getLogPrefix(log.type)}
+                                                </span>
+                                                <span className={`flex-1 ${styles.msg}`}>{log.msg}</span>
+                                            </div>
+                                        );
+                                    })
+                            )}
+
+                            {activeTab === 'debug' && (
+                                <div className="text-[#4a4a4a] text-center py-4">Debug console</div>
+                            )}
+
                             {/* Cursor Line */}
-                            <motion.div
-                                className="flex items-center mt-2"
-                                initial={{ opacity: 0 }}
-                                animate={{ opacity: 1 }}
-                                transition={{ delay: 0.3 }}
-                            >
-                                <span className="w-16" />
-                                <span className="text-[#FFC800] font-bold mr-2">$</span>
-                                <motion.span
-                                    className="w-2 h-4 bg-[#FFC800]"
-                                    animate={{ opacity: [1, 0, 1] }}
-                                    transition={{ repeat: Infinity, duration: 1 }}
-                                />
-                            </motion.div>
+                            {activeTab === 'output' && (
+                                <div className="flex items-center mt-2">
+                                    <span className="text-[#FFC800] font-bold mr-2">$</span>
+                                    <motion.span
+                                        className="w-2 h-4 bg-[#FFC800]"
+                                        animate={{ opacity: [1, 0, 1] }}
+                                        transition={{ repeat: Infinity, duration: 1 }}
+                                    />
+                                </div>
+                            )}
                         </div>
                     </motion.div>
                 )}

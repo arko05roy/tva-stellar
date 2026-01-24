@@ -1,13 +1,25 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { useLatestBlock } from "../hooks/useLatestBlock";
 import { SearchBar } from "./SearchBar";
 import { TVA_CHAIN_ID } from "../lib/constants";
-import { formatBlockNumberHex } from "../lib/formatter";
 
 export function ExplorerHeader() {
   const { data: latestBlock, isLoading } = useLatestBlock();
+  const [walletAddress, setWalletAddress] = useState<string | null>(null);
+  const [connecting, setConnecting] = useState(false);
+
+  const connectWallet = async () => {
+    if (typeof window === "undefined" || !(window as any).ethereum) return;
+    setConnecting(true);
+    try {
+      const accounts = await (window as any).ethereum.request({ method: "eth_requestAccounts" });
+      if (accounts?.[0]) setWalletAddress(accounts[0]);
+    } catch { /* user rejected */ }
+    setConnecting(false);
+  };
 
   return (
     <header className="sticky top-0 z-50 bg-white/95 backdrop-blur-sm border-b border-black/5">
@@ -31,8 +43,8 @@ export function ExplorerHeader() {
             <SearchBar />
           </div>
 
-          {/* Network Status */}
-          <div className="flex items-center gap-4 shrink-0">
+          {/* Network Status & Wallet */}
+          <div className="flex items-center gap-3 shrink-0">
             {/* Latest Block */}
             <div className="hidden sm:flex items-center gap-2 px-3 py-2 rounded-lg bg-black/5">
               <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
@@ -59,6 +71,30 @@ export function ExplorerHeader() {
             <div className="px-3 py-2 rounded-lg border border-[#0055ff]/20 bg-[#0055ff]/5">
               <span className="text-sm font-medium text-[#0055ff]">Testnet</span>
             </div>
+
+            {/* Wallet Connect */}
+            {walletAddress ? (
+              <button
+                onClick={() => setWalletAddress(null)}
+                className="flex items-center gap-2 px-3 py-2 rounded-lg bg-black text-white text-sm font-mono hover:bg-black/80 transition-colors"
+              >
+                <span className="w-2 h-2 rounded-full bg-green-400" />
+                {walletAddress.slice(0, 6)}...{walletAddress.slice(-4)}
+              </button>
+            ) : (
+              <button
+                onClick={connectWallet}
+                disabled={connecting}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-black text-white text-sm font-medium hover:bg-black/80 transition-colors disabled:opacity-50"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M21 5H3a1 1 0 00-1 1v12a1 1 0 001 1h18a1 1 0 001-1V6a1 1 0 00-1-1z" />
+                  <circle cx="16" cy="12" r="2" fill="currentColor" />
+                  <path d="M2 9h20" />
+                </svg>
+                {connecting ? "Connecting..." : "Connect"}
+              </button>
+            )}
           </div>
         </div>
 
