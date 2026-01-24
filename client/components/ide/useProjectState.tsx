@@ -370,6 +370,18 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
 
     const activeFile = activeFileId ? findFile(project.root, activeFileId) : null;
 
+    // Reset build state when switching files
+    const handleSetActiveFileId = useCallback((id: string) => {
+        if (id !== activeFileId) {
+            // Reset build state for the new file
+            setBuildStatus("idle");
+            setCompileResult(null);
+            setVerifyResult(null);
+            setDeployResult(null);
+        }
+        setActiveFileId(id);
+    }, [activeFileId]);
+
     const updateFileContent = (id: string, content: string) => {
         setProject((prev) => {
             const newRoot = JSON.parse(JSON.stringify(prev.root));
@@ -409,6 +421,13 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
             type: getFileType(name),
             content,
         };
+
+        // Reset build state for new file
+        setBuildStatus("idle");
+        setCompileResult(null);
+        setVerifyResult(null);
+        setDeployResult(null);
+
         setProject((prev) => {
             const newRoot = JSON.parse(JSON.stringify(prev.root));
             const addToFolder = (folder: Folder): boolean => {
@@ -830,7 +849,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         project,
         activeFileId,
         activeFile,
-        setActiveFileId,
+        setActiveFileId: handleSetActiveFileId,
         updateFileContent,
         createFile,
         createSolidityFile,
