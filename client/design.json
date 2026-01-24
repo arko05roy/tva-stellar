@@ -1,0 +1,223 @@
+{
+  "design_system": {
+    "brand_identity": {
+      "name": "Stellar",
+      "design_philosophy": "Modern fintech with vibrant, approachable aesthetic combining technical sophistication with creative expressiveness",
+      "target_audience": "Enterprise financial institutions and tech-forward organizations",
+      "aesthetic_inspiration": "Contemporary digital art meets financial technology; accessible complexity"
+    },
+    "color_palette": {
+      "primary_colors": {
+        "stellar_yellow": "#FFC800",
+        "stellar_blue_navy": "#1a1a1a",
+        "stellar_purple": "#9B7FFF",
+        "stellar_light_purple": "#E8DFFE"
+      },
+      "neutral_colors": {
+        "dark_background": "#000000",
+        "text_light": "#FFFFFF",
+        "text_secondary": "#B0B0B0",
+        "accent_gray": "#4A4A4A"
+      },
+      "color_usage": "High contrast yellow against dark backgrounds creates visual hierarchy; purple used as secondary accent; minimalist neutral palette for UI elements"
+    },
+    "typography": {
+      "heading_primary": {
+        "font_family": "serif (appears to be a refined serif like Playfair Display or similar)",
+        "font_weight": "regular to semi-bold",
+        "font_size": "48px - 72px",
+        "characteristics": "Classic, elegant, premium feel; uppercase appropriate for section headers",
+        "line_height": "1.2",
+        "letter_spacing": "natural"
+      },
+      "body_text": {
+        "font_family": "sans-serif (modern, clean sans like Inter, Helvetica Neue, or similar)",
+        "font_weight": "regular (400)",
+        "font_size": "16px - 18px",
+        "characteristics": "Clear, readable, professional",
+        "line_height": "1.6",
+        "color": "light gray (#B0B0B0) on dark backgrounds"
+      },
+      "card_headings": {
+        "font_family": "sans-serif",
+        "font_weight": "600 (semi-bold)",
+        "font_size": "24px - 28px",
+        "characteristics": "Bold, impactful, defines card sections"
+      },
+      "cta_text": {
+        "font_family": "sans-serif",
+        "font_weight": "500",
+        "font_size": "16px",
+        "characteristics": "Clear calls-to-action with arrow indicators"
+      }
+    },
+    "layout_structure": {
+      "page_layout": {
+        "type": "hero_section_with_card_grid",
+        "max_width": "1200px - 1400px",
+        "padding": "60px - 100px horizontal, 80px - 120px vertical",
+        "background": "solid black with subtle texture or grain optional"
+      },
+      "hero_section": {
+        "layout": "centered text block followed by card grid",
+        "text_alignment": "left-aligned",
+        "spacing_before_cards": "80px - 120px",
+        "composition": "headline (main) + subtitle (secondary) + spacer + 3-column grid"
+      },
+      "card_grid": {
+        "columns": "3 (desktop), responsive to 1-2 on smaller screens",
+        "column_gap": "40px - 60px",
+        "row_gap": "60px",
+        "card_width": "equal width columns",
+        "card_height": "auto (content-driven)",
+        "alignment": "top-aligned content"
+      }
+    },
+    "card_component": {
+      "structure": {
+        "hierarchy": [
+          "illustration_area (top)",
+          "heading (below illustration)",
+          "description_text (below heading)",
+          "cta_link (bottom)"
+        ],
+        "spacing_vertical": {
+          "illustration_to_heading": "30px - 40px",
+          "heading_to_description": "20px - 24px",
+          "description_to_cta": "30px - 40px"
+        }
+      },
+      "illustration_section": {
+        "style": "artistic, contemporary digital illustration with mixed media aesthetic",
+        "color_scheme": "yellow, purple, navy with white accents",
+        "visual_style": "illustration + geometric shapes + organic elements",
+        "composition": "centered, square or near-square aspect ratio",
+        "background_treatment": "illustration integrates with transparent/black background, may have splatter or distressed edges",
+        "height": "280px - 320px (approximate)"
+      },
+      "heading_styling": {
+        "font_size": "20px - 24px",
+        "font_weight": "600",
+        "color": "white (#FFFFFF)",
+        "margin_bottom": "16px",
+        "text_style": "descriptive, benefit-focused"
+      },
+      "description_styling": {
+        "font_size": "14px - 16px",
+        "font_weight": "400",
+        "color": "#B0B0B0",
+        "line_height": "1.6",
+        "max_width": "none (full card width)"
+      },
+      "cta_styling": {
+        "type": "text link with arrow",
+        "color": "#FFC800 (yellow)",
+        "font_weight": "500",
+        "text_decoration": "none (arrow appears after text)",
+        "hover_state": "arrow may animate or color intensify",
+        "cursor": "pointer"
+      }
+    },
+    "visual_elements": {
+      "illustrations": {
+        "style": "contemporary digital art with editorial quality",
+        "technique": "vector-based with painterly effects",
+        "color_palette": "yellow (#FFC800), purple (#9B7FFF), navy, white",
+        "characteristics": [
+          "Organic flowing lines combined with geometric shapes",
+          "High contrast between figure and background",
+          "Textured/grainy backgrounds with splatter effects",
+          "Human figures depicted in dynamic poses",
+          "Integration of financial/tech symbols (buildings, coins, currency, graphs)"
+        ],
+        "rendering": "polished yet artistic, not overly realistic"
+      },
+      "icon_and_symbol_integration": {
+        "purpose": "reinforce concept of each card",
+        "style": "minimalist line-based or geometric",
+        "color": "yellow accent, white primary",
+        "size": "medium, integrated into illustration"
+      },
+      "backgrounds": {
+        "page_background": "pure black (#000000)",
+        "card_background": "transparent or dark with subtle texture",
+        "illustration_background": "mixed media effect, splatter/distressed edges"
+      },
+      "borders_and_dividers": {
+        "usage": "minimal to none",
+        "emphasis": "achieved through color contrast and spacing"
+      }
+    },
+    "spacing_and_rhythm": {
+      "micro_spacing": {
+        "text_to_element": "8px - 16px",
+        "element_to_element": "16px - 24px"
+      },
+      "macro_spacing": {
+        "section_vertical_spacing": "60px - 100px",
+        "card_grid_gap": "40px - 60px",
+        "content_padding": "40px - 80px"
+      },
+      "visual_rhythm": "generous white/black space creates breathing room; consistent gap ratios maintain harmony"
+    },
+    "interactive_elements": {
+      "links": {
+        "style": "text + arrow indicator",
+        "color": "yellow (#FFC800)",
+        "hover_effect": "arrow may shift right, text may lighten/brighten",
+        "active_state": "color intensifies"
+      },
+      "buttons": {
+        "navigation_style": "minimal, text-based with hover underline or color change",
+        "design_approach": "clean sans-serif, high contrast"
+      }
+    },
+    "responsive_design": {
+      "breakpoints": {
+        "desktop": "1200px+",
+        "tablet": "768px - 1199px",
+        "mobile": "below 768px"
+      },
+      "grid_adaptation": "3 columns desktop → 2 columns tablet → 1 column mobile",
+      "typography_scaling": "headings scale down proportionally",
+      "spacing_reduction": "gaps and padding reduce on smaller screens proportionally"
+    },
+    "visual_hierarchy": {
+      "level_1": "Hero heading (serif, large, white) - draws primary attention",
+      "level_2": "Card illustrations - emotional engagement and visual interest",
+      "level_3": "Card headings (sans-serif, bold, white) - section organization",
+      "level_4": "Body text and descriptions (secondary gray) - supporting information",
+      "level_5": "CTA links (yellow) - subtle but discoverable action points"
+    },
+    "design_patterns": {
+      "hero_pattern": "large heading + subtitle + spacer + content grid",
+      "card_pattern": "illustration → heading → description → CTA",
+      "content_pattern": "left-aligned text with centered/right visual components",
+      "emphasis_pattern": "yellow accent for CTAs and interactive elements; white for primary text; gray for secondary"
+    },
+    "accessibility_considerations": {
+      "contrast_ratios": "white text on black background (AAA compliant)",
+      "color_not_only_cue": "text labels + arrow icons for CTAs",
+      "font_sizing": "readable base sizes (16px+)",
+      "spacing": "generous spacing aids readability and navigation"
+    },
+    "css_framework_notes": {
+      "recommended_tools": "Tailwind CSS, CSS Grid, Flexbox",
+      "layout_system": "CSS Grid for 3-column card layout, Flexbox for internal card spacing",
+      "animation_potential": "subtle fade-ins on scroll, arrow hover animations, smooth transitions"
+    }
+  },
+  "implementation_guidelines": {
+    "when_replicating": [
+      "Maintain black background as foundation",
+      "Use yellow (#FFC800) sparingly for CTAs and accents",
+      "Ensure 3-column grid layout with proper gaps",
+      "Implement custom illustrations matching editorial quality and artistic style",
+      "Keep typography hierarchy clear with serif for headlines, sans-serif for body",
+      "Prioritize generous spacing and breathing room",
+      "Use high contrast for accessibility and visual impact",
+      "Keep illustrations conceptual and symbolic rather than photorealistic"
+    ],
+    "design_consistency": "Maintain consistent color palette across all sections; uniform card structure; balanced use of illustration and text"
+  }
+}
