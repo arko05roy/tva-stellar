@@ -1,20 +1,21 @@
 /**
- * TVA Protocol Deployment Script
+ * TVA Protocol - Standard Hardhat Deploy Script
  *
- * Compiles Solidity → Soroban WASM → Deploys to Stellar
- * Automatically registers the contract on the TVA chain
+ * Usage: node scripts/deploy.mjs [contract-file]
+ *
+ * This script:
+ * 1. Reads your Solidity source code
+ * 2. Sends it to the TVA RPC node via tva_deployContract
+ * 3. The TVA node compiles it to Soroban WASM and deploys to Stellar
+ * 4. Returns the EVM-compatible address for use with ethers.js/MetaMask
  */
 
-import { execSync } from 'child_process';
-import { readFileSync, existsSync, writeFileSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { ethers } from 'ethers';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const PROJECT_ROOT = path.resolve(__dirname, '../..');
-const TVA_CLI = path.join(PROJECT_ROOT, 'tva');
-const ARTIFACTS_DIR = path.join(PROJECT_ROOT, 'artifacts');
 
 const TVA_RPC_URL = process.env.TVA_RPC_URL || 'http://localhost:8545';
 const TVA_CHAIN_ID = 1414676736;
@@ -22,145 +23,93 @@ const TVA_CHAIN_ID = 1414676736;
 async function main() {
   console.log('=== TVA Protocol Deploy ===\n');
 
-  const contractFile = process.argv[2] || 'contracts/SimpleStorage.sol';
-  const contractName = path.basename(contractFile, '.sol');
+  // Determine which contract to deploy
+  const contractArg = process.argv[2] || 'contracts/SimpleStorage.sol';
+  const contractPath = path.resolve(__dirname, '..', contractArg);
+  const filename = path.basename(contractPath);
+  const contractName = filename.replace('.sol', '');
 
-  // Step 1: Compile with TVA CLI
-  console.log(`1. Compiling ${contractFile}...`);
-  try {
-    const compileOutput = execSync(
-      `${TVA_CLI} compile ${contractFile}`,
-      { cwd: path.resolve(__dirname, '..'), encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] }
-    );
-    console.log(`   ${compileOutput.trim() || 'Compiled successfully'}`);
-  } catch (e) {
-    // Check if artifacts were produced despite error
-    const wasmPath = path.join(ARTIFACTS_DIR, `${contractName}.wasm`);
-    if (!existsSync(wasmPath)) {
-      console.error(`   Compilation failed: ${e.stderr || e.message}`);
-      process.exit(1);
-    }
-    console.log('   Compiled (with warnings)');
-  }
-
-  // Check output
-  const wasmPath = path.join(ARTIFACTS_DIR, `${contractName}.wasm`);
-  if (!existsSync(wasmPath)) {
-    console.error(`   Error: ${wasmPath} not found`);
+  if (!existsSync(contractPath)) {
+    console.error(`Error: Contract file not found: ${contractPath}`);
     process.exit(1);
   }
-  const wasmSize = readFileSync(wasmPath).length;
-  console.log(`   WASM: ${wasmPath} (${wasmSize} bytes)\n`);
 
-  // Step 2: Deploy to Stellar via TVA CLI
-  console.log('2. Deploying to Stellar...');
-  let contractId;
-  try {
-    const deployOutput = execSync(
-      `${TVA_CLI} deploy ${wasmPath}`,
-      { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] }
-    );
-    // Extract contract ID from output (C-prefixed 56-char address)
-    const match = deployOutput.match(/C[A-Z0-9]{55}/);
-    if (match) {
-      contractId = match[0];
-    } else {
-      // Try to get it from the last line
-      contractId = deployOutput.trim().split('\n').pop().trim();
-    }
-    console.log(`   Contract ID: ${contractId}`);
-  } catch (e) {
-    const output = (e.stdout || '') + (e.stderr || '');
-    const match = output.match(/C[A-Z0-9]{55}/);
-    if (match) {
-      contractId = match[0];
-      console.log(`   Contract ID: ${contractId}`);
-    } else {
-      console.error(`   Deployment failed: ${output || e.message}`);
-      process.exit(1);
-    }
-  }
+  console.log(`Contract: ${contractName}`);
+  console.log(`Source:   ${contractPath}`);
+  console.log(`RPC:      ${TVA_RPC_URL}\n`);
 
-  // Step 3: Convert Stellar contract ID to EVM address
-  console.log('\n3. Registering on TVA chain...');
-  const evmAddress = contractIdToEvmAddress(contractId);
-  console.log(`   EVM Address: ${evmAddress}`);
+  // Step 1: Read the Solidity source
+  const source = readFileSync(contractPath, 'utf-8');
+  console.log(`1. Read source (${source.length} bytes)`);
 
-  // Step 4: Connect to TVA RPC and verify
-  console.log('\n4. Verifying deployment...');
+  // Step 2: Connect to TVA RPC
   const provider = new ethers.JsonRpcProvider(TVA_RPC_URL, {
     chainId: TVA_CHAIN_ID,
     name: 'TVA Protocol',
   }, { staticNetwork: true });
 
+  // Verify connection
   try {
-    const code = await provider.getCode(evmAddress);
-    console.log(`   Code at address: ${code.length > 4 ? code.substring(0, 20) + '...' : 'empty (expected for Soroban contracts)'}`);
+    const chainId = await provider.send('eth_chainId', []);
+    console.log(`2. Connected to TVA chain (chainId: ${chainId})`);
   } catch (e) {
-    console.log(`   Code check: ${e.message}`);
+    console.error(`Error: Cannot connect to TVA RPC at ${TVA_RPC_URL}`);
+    console.error(`   Make sure the TVA node is running: cd rpc && cargo run`);
+    process.exit(1);
   }
 
-  // Step 5: Save deployment info
-  const deployInfo = {
-    contractName,
-    contractId,
-    evmAddress,
-    wasmPath,
-    deployedAt: new Date().toISOString(),
-    network: 'testnet',
-    chainId: TVA_CHAIN_ID,
-  };
+  // Step 3: Deploy via tva_deployContract RPC method
+  // This compiles the Solidity to Soroban WASM and deploys to Stellar
+  console.log(`3. Compiling & deploying to Stellar...`);
 
-  const deployPath = path.join(__dirname, '..', 'deployments.json');
-  writeFileSync(deployPath, JSON.stringify(deployInfo, null, 2));
-  console.log(`\n   Deployment saved to: deployments.json`);
+  try {
+    const result = await provider.send('tva_deployContract', [
+      source,     // Solidity source code
+      filename,   // Filename (e.g., "SimpleStorage.sol")
+      '{}',       // Constructor args (JSON)
+      null,       // ABI (auto-generated)
+    ]);
 
-  console.log('\n=== Deployment Complete ===');
-  console.log(`\nTo interact with this contract:`);
-  console.log(`  ./tva invoke ${contractId} get`);
-  console.log(`  ./tva invoke ${contractId} set --arg 42`);
-  console.log(`  ./tva invoke ${contractId} increment`);
-  console.log(`\nOr via ethers.js:`);
-  console.log(`  const contract = new ethers.Contract("${evmAddress}", abi, signer);`);
+    console.log(`\n   Deployed successfully!`);
+    console.log(`   EVM Address:        ${result.contractAddress}`);
+    console.log(`   Stellar Contract:   ${result.stellarContractId}`);
+    console.log(`   WASM Size:          ${result.wasmSize} bytes`);
 
-  return deployInfo;
-}
+    // Step 4: Save deployment info
+    const deployInfo = {
+      contractName,
+      contractAddress: result.contractAddress,
+      stellarContractId: result.stellarContractId,
+      wasmSize: result.wasmSize,
+      source: contractArg,
+      deployedAt: new Date().toISOString(),
+      network: result.network || 'testnet',
+      chainId: TVA_CHAIN_ID,
+      rpcUrl: TVA_RPC_URL,
+    };
 
-/**
- * Convert a Stellar contract ID (C...) to an EVM-compatible address (0x...)
- * Uses first 20 bytes of the decoded public key
- */
-function contractIdToEvmAddress(contractId) {
-  // Stellar contract IDs are base32-encoded (strkey format)
-  // Strip the version byte (C = contract) and checksum, take 20 bytes
-  const decoded = strKeyDecode(contractId);
-  // Use first 20 bytes as the EVM address
-  const addressBytes = decoded.slice(0, 20);
-  return '0x' + Buffer.from(addressBytes).toString('hex');
-}
+    const deployPath = path.join(__dirname, '..', 'deployments.json');
+    writeFileSync(deployPath, JSON.stringify(deployInfo, null, 2));
+    console.log(`\n4. Deployment saved to: deployments.json`);
 
-/**
- * Decode a Stellar strkey-encoded address to raw bytes
- */
-function strKeyDecode(strkey) {
-  const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
-  const encoded = strkey;
+    console.log(`\n=== Deploy Complete ===`);
+    console.log(`\nTo interact with the contract:`);
+    console.log(`  node scripts/test.mjs`);
+    console.log(`\nOr in your code:`);
+    console.log(`  const provider = new ethers.JsonRpcProvider("${TVA_RPC_URL}");`);
+    console.log(`  const contract = new ethers.Contract("${result.contractAddress}", abi, signer);`);
+    console.log(`  const value = await contract.get();`);
 
-  // Base32 decode
-  let bits = '';
-  for (const char of encoded) {
-    const val = ALPHABET.indexOf(char);
-    if (val === -1) continue;
-    bits += val.toString(2).padStart(5, '0');
+    return deployInfo;
+  } catch (e) {
+    console.error(`\n   Deployment failed!`);
+    if (e.info?.error?.message) {
+      console.error(`   Error: ${e.info.error.message}`);
+    } else {
+      console.error(`   Error: ${e.message}`);
+    }
+    process.exit(1);
   }
-
-  const bytes = [];
-  for (let i = 0; i + 8 <= bits.length; i += 8) {
-    bytes.push(parseInt(bits.substring(i, i + 8), 2));
-  }
-
-  // Skip version byte (first byte) and checksum (last 2 bytes)
-  return bytes.slice(1, bytes.length - 2);
 }
 
 main().catch(console.error);

@@ -212,9 +212,15 @@ impl SettlementEngine {
 
         let data_bytes = hex::decode(&tx.data).unwrap_or_default();
 
-        let to_addr = tx.to_addr.as_deref().ok_or_else(|| {
-            anyhow!("Contract creation settlement not yet supported")
-        })?;
+        let to_addr = match tx.to_addr.as_deref() {
+            Some(addr) => addr,
+            None => {
+                // Contract creation transactions are handled by tva_deployContract.
+                // Finalize locally - the contract is already deployed to Stellar.
+                info!("Contract creation tx {}... - finalizing locally", &tx.hash[..14]);
+                return Err(anyhow!("Contract creation - finalized locally"));
+            }
+        };
 
         if data_bytes.len() < 4 {
             return Err(anyhow!("No calldata for settlement (need >= 4 bytes)"));

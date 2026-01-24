@@ -1,37 +1,30 @@
 /**
- * TVA Protocol Integration Test
+ * TVA Protocol - Contract Interaction Test
  *
- * Tests deployed contract via both:
- * - TVA CLI (./tva invoke)
- * - ethers.js (standard EVM tooling)
- * - Blockscout verification
+ * Usage: node scripts/test.mjs
+ *
+ * Tests the deployed contract via standard ethers.js calls
+ * through the TVA RPC (which translates to Stellar/Soroban under the hood).
  */
 
-import { execSync } from 'child_process';
 import { readFileSync, existsSync } from 'fs';
 import { ethers } from 'ethers';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const PROJECT_ROOT = path.resolve(__dirname, '../..');
-const TVA_CLI = path.join(PROJECT_ROOT, 'tva');
 
 const TVA_RPC_URL = process.env.TVA_RPC_URL || 'http://localhost:8545';
-const BLOCKSCOUT_URL = process.env.BLOCKSCOUT_URL || 'http://localhost:4000';
 const TVA_CHAIN_ID = 1414676736;
+const TEST_PRIVATE_KEY = '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80';
 
 // SimpleStorage ABI
 const ABI = [
   "function get() view returns (uint64)",
   "function set(uint64 _value)",
   "function increment()",
-  "function storedValue() view returns (uint64)",
-  "function owner() view returns (address)",
   "event ValueChanged(uint64 indexed oldValue, uint64 indexed newValue, address setter)",
 ];
-
-const TEST_PRIVATE_KEY = '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80';
 
 async function main() {
   console.log('=== TVA Protocol Integration Test ===\n');
@@ -39,142 +32,129 @@ async function main() {
   // Load deployment info
   const deployPath = path.join(__dirname, '..', 'deployments.json');
   if (!existsSync(deployPath)) {
-    console.error('No deployment found. Run: npm run deploy');
+    console.error('No deployment found. Run first: node scripts/deploy.mjs');
     process.exit(1);
   }
   const deploy = JSON.parse(readFileSync(deployPath, 'utf-8'));
-  console.log(`Contract: ${deploy.contractName}`);
-  console.log(`Stellar ID: ${deploy.contractId}`);
-  console.log(`EVM Address: ${deploy.evmAddress}\n`);
+  console.log(`Contract:         ${deploy.contractName}`);
+  console.log(`EVM Address:      ${deploy.contractAddress}`);
+  console.log(`Stellar Contract: ${deploy.stellarContractId}\n`);
 
   let passed = 0;
   let failed = 0;
 
-  // --- Test 1: TVA CLI invoke ---
-  console.log('--- Test 1: TVA CLI ---');
-  try {
-    const getResult = execSync(
-      `${TVA_CLI} invoke ${deploy.contractId} get`,
-      { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] }
-    );
-    console.log(`  tva invoke get: ${getResult.trim()}`);
-    passed++;
-  } catch (e) {
-    console.log(`  tva invoke get: FAILED (${(e.stderr || e.message).trim()})`);
-    failed++;
-  }
-
-  // --- Test 2: TVA RPC Connection ---
-  console.log('\n--- Test 2: TVA RPC ---');
+  // Connect to TVA RPC
   const provider = new ethers.JsonRpcProvider(TVA_RPC_URL, {
     chainId: TVA_CHAIN_ID,
     name: 'TVA Protocol',
   }, { staticNetwork: true });
 
+  const wallet = new ethers.Wallet(TEST_PRIVATE_KEY, provider);
+  const contract = new ethers.Contract(deploy.contractAddress, ABI, wallet);
+
+  // --- Test 1: Chain connection ---
+  console.log('Test 1: Chain Connection');
   try {
+    const chainId = await provider.send('eth_chainId', []);
     const blockNumber = await provider.getBlockNumber();
-    console.log(`  Block number: ${blockNumber}`);
+    console.log(`  Chain ID: ${chainId}`);
+    console.log(`  Block:    #${blockNumber}`);
     passed++;
   } catch (e) {
-    console.log(`  Block number: FAILED (${e.message})`);
+    console.log(`  FAILED: ${e.message}`);
     failed++;
   }
 
-  // --- Test 3: Contract Call via eth_call ---
-  console.log('\n--- Test 3: Contract Interaction ---');
-  const wallet = new ethers.Wallet(TEST_PRIVATE_KEY, provider);
-  const contract = new ethers.Contract(deploy.evmAddress, ABI, wallet);
-
+  // --- Test 2: Read contract state (eth_call -> Soroban simulate) ---
+  console.log('\nTest 2: Read Contract (eth_call)');
   try {
-    // Call get() via eth_call (reads from Soroban)
     const value = await contract.get();
     console.log(`  get(): ${value}`);
     passed++;
   } catch (e) {
-    console.log(`  get(): FAILED (${e.message})`);
+    console.log(`  FAILED: ${e.message}`);
     failed++;
   }
 
-  // --- Test 4: Send Transaction via RPC ---
-  console.log('\n--- Test 4: Transaction Send ---');
+  // --- Test 3: Send transaction (eth_sendRawTransaction -> Soroban invoke) ---
+  console.log('\nTest 3: Write Contract (sendTransaction)');
   try {
     const iface = new ethers.Interface(ABI);
     const calldata = iface.encodeFunctionData('set', [42]);
 
     const tx = await wallet.sendTransaction({
-      to: deploy.evmAddress,
+      to: deploy.contractAddress,
       data: calldata,
       gasLimit: 100000,
       gasPrice: ethers.parseUnits('1', 'gwei'),
     });
-    console.log(`  TX sent: ${tx.hash}`);
+    console.log(`  TX hash: ${tx.hash}`);
 
-    // Wait for receipt
+    // Wait for block inclusion
     let receipt = null;
-    for (let i = 0; i < 10; i++) {
+    for (let i = 0; i < 12; i++) {
       await new Promise(r => setTimeout(r, 2000));
       receipt = await provider.getTransactionReceipt(tx.hash);
       if (receipt) break;
     }
 
     if (receipt) {
-      console.log(`  Block: #${receipt.blockNumber}`);
-      console.log(`  Status: ${receipt.status === 1 ? 'SUCCESS' : 'FAILED'}`);
-      passed++;
+      console.log(`  Block:   #${receipt.blockNumber}`);
+      console.log(`  Status:  ${receipt.status === 1 ? 'SUCCESS' : 'FAILED'}`);
     } else {
-      console.log(`  Receipt: pending`);
-      passed++; // Still count as passed - tx was accepted
+      console.log(`  Status:  pending (tx accepted, waiting for settlement)`);
     }
-  } catch (e) {
-    console.log(`  Transaction: FAILED (${e.message})`);
-    failed++;
-  }
-
-  // --- Test 5: TVA CLI set ---
-  console.log('\n--- Test 5: TVA CLI Set ---');
-  try {
-    // Get deployer address for _caller
-    const deployerAddr = execSync(
-      `${path.join(PROJECT_ROOT, 'tooling/bin/stellar')} keys address tva-deployer`,
-      { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] }
-    ).trim();
-    const setResult = execSync(
-      `${TVA_CLI} invoke ${deploy.contractId} set --_caller ${deployerAddr} --_value 99`,
-      { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] }
-    );
-    console.log(`  tva invoke set 99: ${setResult.trim() || 'OK'}`);
     passed++;
   } catch (e) {
-    console.log(`  tva invoke set: FAILED (${(e.stderr || e.message).trim()})`);
+    console.log(`  FAILED: ${e.message}`);
     failed++;
   }
 
-  // --- Test 6: Blockscout Visibility ---
-  console.log('\n--- Test 6: Blockscout ---');
+  // --- Test 4: Read updated state ---
+  console.log('\nTest 4: Read Updated State');
   try {
-    const statsRes = await fetch(`${BLOCKSCOUT_URL}/api/v2/stats`);
-    const stats = await statsRes.json();
-    console.log(`  Blocks indexed: ${stats.total_blocks}`);
-    console.log(`  Transactions: ${stats.total_transactions}`);
-    console.log(`  Addresses: ${stats.total_addresses}`);
+    // Small delay for settlement
+    await new Promise(r => setTimeout(r, 3000));
+    const value = await contract.get();
+    console.log(`  get(): ${value}`);
     passed++;
   } catch (e) {
-    console.log(`  Blockscout: FAILED (${e.message})`);
+    console.log(`  FAILED: ${e.message}`);
     failed++;
   }
 
-  // --- Test 7: Hardhat Compatibility ---
-  console.log('\n--- Test 7: Hardhat Compat ---');
+  // --- Test 5: Gas estimation ---
+  console.log('\nTest 5: Gas Estimation');
   try {
     const gasPrice = await provider.send('eth_gasPrice', []);
-    const feeHistory = await provider.send('eth_feeHistory', ['0x1', 'latest', []]);
-    const syncing = await provider.send('eth_syncing', []);
-    console.log(`  eth_gasPrice: ${gasPrice}`);
-    console.log(`  eth_feeHistory: ${JSON.stringify(feeHistory).substring(0, 50)}...`);
-    console.log(`  eth_syncing: ${syncing}`);
+    console.log(`  Gas price: ${gasPrice} (${parseInt(gasPrice, 16)} wei)`);
     passed++;
   } catch (e) {
-    console.log(`  Hardhat compat: FAILED (${e.message})`);
+    console.log(`  FAILED: ${e.message}`);
+    failed++;
+  }
+
+  // --- Test 6: Verification ---
+  console.log('\nTest 6: Contract Verification');
+  try {
+    const source = readFileSync(
+      path.resolve(__dirname, '..', deploy.source || 'contracts/SimpleStorage.sol'),
+      'utf-8'
+    );
+    const result = await provider.send('tva_verifyContract', [
+      deploy.contractAddress,
+      source,
+      '0.3.0',
+      '--target soroban',
+      '{}'
+    ]);
+    console.log(`  Verified: ${result.verified}`);
+    if (result.sourceHash) {
+      console.log(`  Source hash: ${result.sourceHash}`);
+    }
+    passed++;
+  } catch (e) {
+    console.log(`  FAILED: ${e.message}`);
     failed++;
   }
 

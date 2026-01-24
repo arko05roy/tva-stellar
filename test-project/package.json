@@ -2,16 +2,14 @@
   "name": "tva-test-project",
   "version": "1.0.0",
   "type": "module",
-  "description": "TVA Protocol integration test - Solidity → Soroban → Stellar",
+  "description": "TVA Protocol test project - Deploy Solidity to Stellar via standard Hardhat workflow",
   "scripts": {
-    "compile": "../tva compile contracts/SimpleStorage.sol",
     "deploy": "node scripts/deploy.mjs",
+    "deploy:counter": "node scripts/deploy.mjs contracts/Counter.sol",
     "test": "node scripts/test.mjs",
-    "full": "npm run compile && npm run deploy && npm run test"
+    "full": "npm run deploy && npm run test"
   },
   "dependencies": {
-    "ethers": "^6.16.0",
-    "@nomicfoundation/hardhat-ethers": "^3.0.0",
-    "hardhat": "^2.28.0"
+    "ethers": "^6.16.0"
   }
 }

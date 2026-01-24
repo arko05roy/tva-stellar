@@ -182,7 +182,7 @@ fn register_methods(module: &mut RpcModule<Arc<RpcState>>) -> Result<()> {
 
     module.register_async_method("eth_call", |params, ctx, _| async move {
         let p: Vec<serde_json::Value> = params.parse().unwrap_or_default();
-        eth::call(&ctx.soroban_client, &ctx.config, &ctx.abi_registry, &p)
+        eth::call(&ctx.soroban_client, &ctx.config, &ctx.abi_registry, &ctx.chain.db, &p)
             .await
             .map_err(|e| jsonrpsee_error(&e.to_string()))
     })?;
@@ -404,6 +404,13 @@ fn register_methods(module: &mut RpcModule<Arc<RpcState>>) -> Result<()> {
     module.register_async_method("tva_getVerifiedSource", |params, ctx, _| async move {
         let p: Vec<serde_json::Value> = params.parse().unwrap_or_default();
         eth::get_verified_source(&ctx.soroban_client, &ctx.config, &p)
+            .await
+            .map_err(|e| jsonrpsee_error(&e.to_string()))
+    })?;
+
+    module.register_async_method("tva_deployContract", |params, ctx, _| async move {
+        let p: Vec<serde_json::Value> = params.parse().unwrap_or_default();
+        eth::deploy_contract(&ctx.chain.db, &ctx.config, &p)
             .await
             .map_err(|e| jsonrpsee_error(&e.to_string()))
     })?;

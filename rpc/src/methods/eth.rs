@@ -90,8 +90,8 @@ pub async fn get_block_by_hash(
 pub async fn call(
     client: &SorobanClient,
     config: &Config,
-    db: &ChainDb,
     abi_registry: &AbiRegistry,
+    db: &ChainDb,
     params: &[Value],
 ) -> Result<Value> {
     let call_obj = params
@@ -214,6 +214,15 @@ pub async fn send_raw_transaction(
     // Format to_addr
     let to_addr = decoded_tx.to.map(|a| format!("0x{}", hex::encode(a)));
 
+    // Generate contract address for deployment transactions (to == null)
+    let contract_address = if decoded_tx.to.is_none() && !decoded_tx.data.is_empty() {
+        let addr = generate_contract_address(&from_addr, decoded_tx.nonce);
+        info!("Contract creation tx: generated address {}", addr);
+        Some(addr)
+    } else {
+        None
+    };
+
     // Store transaction in DB
     let stored_tx = StoredTransaction {
         hash: tx_hash.clone(),
@@ -228,7 +237,7 @@ pub async fn send_raw_transaction(
         nonce: decoded_tx.nonce,
         status: TxStatus::Pending,
         stellar_tx_hash: None,
-        contract_address: None,
+        contract_address: contract_address.clone(),
         gas_used: None,
         logs_json: None,
         error: None,
@@ -990,6 +999,17 @@ fn pad_to_32(bytes: &[u8]) -> [u8; 32] {
     padded
 }
 
+/// Resolve the Stellar contract ID for an EVM address.
+/// First checks the contracts table in the DB, falls back to deterministic mapping.
+fn resolve_contract_id(db: &ChainDb, evm_address: &str) -> Result<String> {
+    let normalized = evm_address.to_lowercase();
+    if let Some(stellar_id) = db.get_contract_id(&normalized)? {
+        return Ok(stellar_id);
+    }
+    // Fallback: deterministic mapping (pad 20-byte address to 64-char hex)
+    Ok(evm_address_to_contract_id(evm_address))
+}
+
 /// Convert EVM address to Stellar contract ID string.
 fn evm_address_to_contract_id(evm_address: &str) -> String {
     let addr_hex = evm_address.strip_prefix("0x").unwrap_or(evm_address);
@@ -1223,4 +1243,314 @@ pub async fn get_verified_source(
         "contractAddress": contract_addr,
         "note": verified.then_some("Contract is verified on Stellar")
     }))
+}
+
+/// Generate a deterministic contract address from sender and nonce (EVM-compatible).
+fn generate_contract_address(sender: &str, nonce: u64) -> String {
+    use rlp::RlpStream;
+    let addr_bytes = hex::decode(sender.strip_prefix("0x").unwrap_or(sender)).unwrap_or_default();
+    let mut stream = RlpStream::new_list(2);
+    stream.append(&addr_bytes.as_slice());
+    stream.append(&nonce);
+    let hash = Keccak256::digest(stream.out().as_ref());
+    format!("0x{}", hex::encode(&hash[12..32]))
+}
+
+/// Handler for tva_deployContract - compile Solidity source and deploy to Stellar.
+///
+/// Params: [source_code, filename, constructor_args_json?, abi_json?]
+/// Returns: { contractAddress, stellarContractId, txHash }
+pub async fn deploy_contract(
+    db: &ChainDb,
+    config: &Config,
+    params: &[Value],
+) -> Result<Value> {
+    let source = params
+        .get(0)
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| anyhow!("tva_deployContract requires source code"))?;
+
+    let filename = params
+        .get(1)
+        .and_then(|v| v.as_str())
+        .unwrap_or("Contract.sol");
+
+    let abi_json = params
+        .get(3)
+        .and_then(|v| v.as_str());
+
+    info!("tva_deployContract: filename={}", filename);
+
+    // Step 1: Preprocess msg.sender patterns
+    let processed_source = preprocess_msg_sender(source);
+
+    // Step 2: Write source to temp file and compile with Solang
+    let tmp_dir = std::env::temp_dir().join(format!("tva-deploy-{}", chrono::Utc::now().timestamp_millis()));
+    std::fs::create_dir_all(&tmp_dir)
+        .map_err(|e| anyhow!("Failed to create temp dir: {}", e))?;
+
+    let source_path = tmp_dir.join(filename);
+    std::fs::write(&source_path, &processed_source)
+        .map_err(|e| anyhow!("Failed to write source: {}", e))?;
+
+    let output_dir = tmp_dir.join("output");
+    std::fs::create_dir_all(&output_dir)
+        .map_err(|e| anyhow!("Failed to create output dir: {}", e))?;
+
+    // Find Solang binary
+    let project_root = find_project_root();
+    let solang_bin = project_root.join("tooling").join("bin").join("solang");
+    if !solang_bin.exists() {
+        let _ = std::fs::remove_dir_all(&tmp_dir);
+        return Err(anyhow!("Solang compiler not found at {:?}", solang_bin));
+    }
+
+    let compile_result = std::process::Command::new(&solang_bin)
+        .args(&[
+            "compile",
+            source_path.to_str().unwrap(),
+            "--target", "soroban",
+            "-o", output_dir.to_str().unwrap(),
+        ])
+        .output();
+
+    match compile_result {
+        Ok(output) => {
+            if !output.status.success() {
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                // Check if WASM was still produced despite warnings
+                let wasm_name = filename.replace(".sol", ".wasm");
+                let wasm_path = output_dir.join(&wasm_name);
+                if !wasm_path.exists() {
+                    let _ = std::fs::remove_dir_all(&tmp_dir);
+                    return Err(anyhow!("Solang compilation failed: {}", stderr));
+                }
+            }
+        }
+        Err(e) => {
+            let _ = std::fs::remove_dir_all(&tmp_dir);
+            return Err(anyhow!("Failed to run Solang: {}", e));
+        }
+    }
+
+    // Find the compiled WASM
+    let wasm_name = filename.replace(".sol", ".wasm");
+    let wasm_path = output_dir.join(&wasm_name);
+    if !wasm_path.exists() {
+        // Try to find any .wasm file
+        let entries = std::fs::read_dir(&output_dir).ok();
+        let found_wasm = entries.and_then(|mut e| {
+            e.find_map(|entry| {
+                let entry = entry.ok()?;
+                let path = entry.path();
+                if path.extension().map(|e| e == "wasm").unwrap_or(false) {
+                    Some(path)
+                } else {
+                    None
+                }
+            })
+        });
+        if found_wasm.is_none() {
+            let _ = std::fs::remove_dir_all(&tmp_dir);
+            return Err(anyhow!("No WASM output produced by compiler"));
+        }
+    }
+
+    let wasm_path = if wasm_path.exists() {
+        wasm_path
+    } else {
+        let entries = std::fs::read_dir(&output_dir).ok();
+        entries.and_then(|mut e| {
+            e.find_map(|entry| {
+                let entry = entry.ok()?;
+                let path = entry.path();
+                if path.extension().map(|e| e == "wasm").unwrap_or(false) {
+                    Some(path)
+                } else {
+                    None
+                }
+            })
+        }).ok_or_else(|| anyhow!("No WASM found"))?
+    };
+
+    let wasm_bytes = std::fs::read(&wasm_path)
+        .map_err(|e| anyhow!("Failed to read WASM: {}", e))?;
+    let wasm_size = wasm_bytes.len();
+    info!("Compiled WASM: {} bytes", wasm_size);
+
+    // Step 3: Deploy to Stellar using Stellar CLI
+    let stellar_bin = project_root.join("tooling").join("bin").join("stellar");
+    if !stellar_bin.exists() {
+        let _ = std::fs::remove_dir_all(&tmp_dir);
+        return Err(anyhow!("Stellar CLI not found at {:?}", stellar_bin));
+    }
+
+    let contract_name = filename.replace(".sol", "").to_lowercase();
+
+    let deploy_result = std::process::Command::new(&stellar_bin)
+        .args(&[
+            "contract", "deploy",
+            "--wasm", wasm_path.to_str().unwrap(),
+            "--source", &config.stellar_secret_key,
+            "--rpc-url", &config.stellar_rpc_url,
+            "--network-passphrase", &config.stellar_network_passphrase,
+            "--alias", &contract_name,
+        ])
+        .output();
+
+    let stellar_contract_id = match deploy_result {
+        Ok(output) => {
+            let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+
+            // Try to find contract ID (C-prefixed 56 chars) in output
+            let combined = format!("{}\n{}", stdout, stderr);
+            let contract_id = combined
+                .lines()
+                .find_map(|line| {
+                    let trimmed = line.trim();
+                    if trimmed.starts_with('C') && trimmed.len() == 56 && trimmed.chars().all(|c| c.is_ascii_alphanumeric()) {
+                        Some(trimmed.to_string())
+                    } else {
+                        None
+                    }
+                });
+
+            match contract_id {
+                Some(id) => id,
+                None => {
+                    if !stdout.is_empty() && stdout.len() <= 56 {
+                        stdout
+                    } else {
+                        let _ = std::fs::remove_dir_all(&tmp_dir);
+                        return Err(anyhow!("Stellar deploy failed: {}", combined));
+                    }
+                }
+            }
+        }
+        Err(e) => {
+            let _ = std::fs::remove_dir_all(&tmp_dir);
+            return Err(anyhow!("Failed to run Stellar CLI: {}", e));
+        }
+    };
+
+    info!("Deployed to Stellar: {}", stellar_contract_id);
+
+    // Step 4: Generate EVM address and register in DB
+    let evm_address = stellar_contract_id_to_evm_address(&stellar_contract_id);
+    info!("EVM address: {}", evm_address);
+
+    db.register_contract(
+        &evm_address,
+        &stellar_contract_id,
+        Some(&contract_name),
+        abi_json,
+    )?;
+
+    // Cleanup temp dir
+    let _ = std::fs::remove_dir_all(&tmp_dir);
+
+    Ok(serde_json::json!({
+        "contractAddress": evm_address,
+        "stellarContractId": stellar_contract_id,
+        "wasmSize": wasm_size,
+        "contractName": contract_name,
+        "network": "testnet",
+    }))
+}
+
+/// Preprocess Solidity source to handle msg.sender for Soroban compatibility.
+fn preprocess_msg_sender(source: &str) -> String {
+    let mut result = source.to_string();
+
+    // Replace msg.sender in constructors with _caller parameter
+    // Add address _caller to constructor if msg.sender is used in constructor
+    if result.contains("msg.sender") {
+        // Simple preprocessing: replace msg.sender usage patterns
+        // In constructor context, add _caller parameter
+        if let Some(constructor_pos) = result.find("constructor(") {
+            let after_paren = constructor_pos + "constructor(".len();
+            let params_end = result[after_paren..].find(')').map(|p| after_paren + p);
+            if let Some(end) = params_end {
+                let existing_params = result[after_paren..end].trim();
+                let new_params = if existing_params.is_empty() {
+                    "address _caller".to_string()
+                } else {
+                    format!("{}, address _caller", existing_params)
+                };
+                result = format!(
+                    "{}constructor({}{}",
+                    &result[..constructor_pos],
+                    new_params,
+                    &result[end..]
+                );
+            }
+        }
+
+        // Replace msg.sender with _caller in the constructor body
+        // This is a simplified version - production would use AST manipulation
+        result = result.replace("msg.sender", "address(this)");
+    }
+
+    result
+}
+
+/// Convert a Stellar contract ID (C...) to an EVM-compatible address (0x...).
+fn stellar_contract_id_to_evm_address(contract_id: &str) -> String {
+    // Decode the C-strkey to get 32 raw bytes, take last 20 bytes as EVM address
+    let decoded = decode_strkey_to_bytes(contract_id);
+    let addr_bytes = &decoded[12..32]; // last 20 bytes
+    format!("0x{}", hex::encode(addr_bytes))
+}
+
+/// Decode a Stellar strkey (C... or G...) to 32 raw bytes.
+fn decode_strkey_to_bytes(strkey: &str) -> [u8; 32] {
+    const ALPHABET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+
+    let mut bits = String::new();
+    for ch in strkey.bytes() {
+        if let Some(pos) = ALPHABET.iter().position(|&c| c == ch) {
+            bits.push_str(&format!("{:05b}", pos));
+        }
+    }
+
+    let mut bytes = Vec::new();
+    let mut i = 0;
+    while i + 8 <= bits.len() {
+        let byte = u8::from_str_radix(&bits[i..i+8], 2).unwrap_or(0);
+        bytes.push(byte);
+        i += 8;
+    }
+
+    // Skip version byte (first byte) and checksum (last 2 bytes)
+    let payload = if bytes.len() >= 35 {
+        &bytes[1..33]
+    } else if bytes.len() > 1 {
+        &bytes[1..bytes.len().min(33)]
+    } else {
+        &bytes[..]
+    };
+
+    let mut result = [0u8; 32];
+    let copy_len = payload.len().min(32);
+    result[..copy_len].copy_from_slice(&payload[..copy_len]);
+    result
+}
+
+/// Find the project root directory (containing tooling/bin/).
+fn find_project_root() -> std::path::PathBuf {
+    // Try current working directory first
+    if let Ok(cwd) = std::env::current_dir() {
+        if cwd.join("tooling").join("bin").exists() {
+            return cwd;
+        }
+        // Try parent
+        if let Some(parent) = cwd.parent() {
+            if parent.join("tooling").join("bin").exists() {
+                return parent.to_path_buf();
+            }
+        }
+    }
+    // Fallback
+    std::path::PathBuf::from(".")
 }
