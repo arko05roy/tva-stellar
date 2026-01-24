@@ -63,7 +63,8 @@ function ResizeHandle({ orientation = "vertical" }: { orientation?: "vertical" |
 }
 
 export default function PlaygroundPage() {
-    const [terminalHeight, setTerminalHeight] = useState(200);
+    const terminalHeight = 200;
+    const [terminalCollapsed, setTerminalCollapsed] = useState(false);
 
     return (
         <ProjectProvider>
@@ -111,18 +112,24 @@ export default function PlaygroundPage() {
                             <CodeEditor />
                         </motion.div>
 
-                        {/* Resize Handle */}
-                        <ResizeHandle orientation="horizontal" />
+                        {/* Resize Handle - hidden when collapsed */}
+                        {!terminalCollapsed && <ResizeHandle orientation="horizontal" />}
 
                         {/* Terminal Panel (Bottom) */}
                         <motion.div
-                            className="flex-shrink-0"
-                            style={{ height: terminalHeight }}
+                            className="flex-shrink-0 overflow-hidden"
                             initial={{ opacity: 0, y: 20 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ delay: 0.2, duration: 0.3 }}
+                            animate={{
+                                opacity: 1,
+                                y: 0,
+                                height: terminalCollapsed ? 30 : terminalHeight,
+                            }}
+                            transition={{ duration: 0.25, ease: [0.4, 0, 0.2, 1] }}
                         >
-                            <Terminal />
+                            <Terminal
+                                isCollapsed={terminalCollapsed}
+                                onToggle={() => setTerminalCollapsed(prev => !prev)}
+                            />
                         </motion.div>
                     </div>
                 </div>

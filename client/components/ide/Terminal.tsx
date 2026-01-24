@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useRef, useEffect, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import { useProject } from "./useProjectState";
 
 const ChevronDownIcon = () => (
@@ -23,9 +23,13 @@ const MaximizeIcon = () => (
     </svg>
 );
 
-export default function Terminal() {
+interface TerminalProps {
+    isCollapsed: boolean;
+    onToggle: () => void;
+}
+
+export default function Terminal({ isCollapsed, onToggle }: TerminalProps) {
     const { logs, clearLogs } = useProject();
-    const [isCollapsed, setIsCollapsed] = useState(false);
     const [activeTab, setActiveTab] = useState<'output' | 'problems' | 'debug'>('output');
     const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -128,7 +132,7 @@ export default function Terminal() {
                         <MaximizeIcon />
                     </motion.button>
                     <motion.button
-                        onClick={() => setIsCollapsed(!isCollapsed)}
+                        onClick={onToggle}
                         className="p-1.5 rounded text-[#4a4a4a] hover:text-white hover:bg-[#1a1a1a] transition-colors"
                         whileHover={{ scale: 1.1 }}
                         whileTap={{ scale: 0.9 }}
@@ -141,71 +145,60 @@ export default function Terminal() {
             </div>
 
             {/* Terminal Content */}
-            <AnimatePresence>
-                {!isCollapsed && (
-                    <motion.div
-                        initial={{ height: 0, opacity: 0 }}
-                        animate={{ height: 'auto', opacity: 1 }}
-                        exit={{ height: 0, opacity: 0 }}
-                        transition={{ duration: 0.2 }}
-                        className="flex-1 overflow-hidden"
-                    >
-                        <div ref={scrollRef} className="h-full overflow-y-auto p-3 space-y-0.5">
-                            {activeTab === 'output' && logs.map((log, i) => {
-                                const styles = getLogStyles(log.type);
-                                return (
-                                    <div
-                                        key={i}
-                                        className="flex items-start group hover:bg-[#0a0a0a] rounded px-2 py-0.5 -mx-2"
-                                    >
-                                        {/* Prefix */}
-                                        <span className={`w-8 flex-shrink-0 ${styles.prefix}`}>
-                                            {getLogPrefix(log.type)}
-                                        </span>
-
-                                        {/* Message */}
-                                        <span className={`flex-1 whitespace-pre-wrap break-all ${styles.msg}`}>
-                                            {log.msg}
-                                        </span>
-                                    </div>
-                                );
-                            })}
-
-                            {activeTab === 'problems' && (
-                                logs.filter(l => l.type === 'error' || l.type === 'warning').length === 0
-                                    ? <div className="text-[#4a4a4a] text-center py-4">No problems detected</div>
-                                    : logs.filter(l => l.type === 'error' || l.type === 'warning').map((log, i) => {
-                                        const styles = getLogStyles(log.type);
-                                        return (
-                                            <div key={i} className="flex items-start px-2 py-0.5">
-                                                <span className={`w-8 flex-shrink-0 ${styles.prefix}`}>
-                                                    {getLogPrefix(log.type)}
-                                                </span>
-                                                <span className={`flex-1 ${styles.msg}`}>{log.msg}</span>
-                                            </div>
-                                        );
-                                    })
-                            )}
-
-                            {activeTab === 'debug' && (
-                                <div className="text-[#4a4a4a] text-center py-4">Debug console</div>
-                            )}
-
-                            {/* Cursor Line */}
-                            {activeTab === 'output' && (
-                                <div className="flex items-center mt-2">
-                                    <span className="text-[#FFC800] font-bold mr-2">$</span>
-                                    <motion.span
-                                        className="w-2 h-4 bg-[#FFC800]"
-                                        animate={{ opacity: [1, 0, 1] }}
-                                        transition={{ repeat: Infinity, duration: 1 }}
-                                    />
+            {!isCollapsed && (
+                <div className="flex-1 overflow-hidden">
+                    <div ref={scrollRef} className="h-full overflow-y-auto p-3 space-y-0.5">
+                        {activeTab === 'output' && logs.map((log, i) => {
+                            const styles = getLogStyles(log.type);
+                            return (
+                                <div
+                                    key={i}
+                                    className="flex items-start group hover:bg-[#0a0a0a] rounded px-2 py-0.5 -mx-2"
+                                >
+                                    <span className={`w-8 flex-shrink-0 ${styles.prefix}`}>
+                                        {getLogPrefix(log.type)}
+                                    </span>
+                                    <span className={`flex-1 whitespace-pre-wrap break-all ${styles.msg}`}>
+                                        {log.msg}
+                                    </span>
                                 </div>
-                            )}
-                        </div>
-                    </motion.div>
-                )}
-            </AnimatePresence>
+                            );
+                        })}
+
+                        {activeTab === 'problems' && (
+                            logs.filter(l => l.type === 'error' || l.type === 'warning').length === 0
+                                ? <div className="text-[#4a4a4a] text-center py-4">No problems detected</div>
+                                : logs.filter(l => l.type === 'error' || l.type === 'warning').map((log, i) => {
+                                    const styles = getLogStyles(log.type);
+                                    return (
+                                        <div key={i} className="flex items-start px-2 py-0.5">
+                                            <span className={`w-8 flex-shrink-0 ${styles.prefix}`}>
+                                                {getLogPrefix(log.type)}
+                                            </span>
+                                            <span className={`flex-1 ${styles.msg}`}>{log.msg}</span>
+                                        </div>
+                                    );
+                                })
+                        )}
+
+                        {activeTab === 'debug' && (
+                            <div className="text-[#4a4a4a] text-center py-4">Debug console</div>
+                        )}
+
+                        {/* Cursor Line */}
+                        {activeTab === 'output' && (
+                            <div className="flex items-center mt-2">
+                                <span className="text-[#FFC800] font-bold mr-2">$</span>
+                                <motion.span
+                                    className="w-2 h-4 bg-[#FFC800]"
+                                    animate={{ opacity: [1, 0, 1] }}
+                                    transition={{ repeat: Infinity, duration: 1 }}
+                                />
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
         </motion.div>
     );
 }
