@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useMemo, Suspense } from "react";
+import { useRef, useMemo, Suspense, useEffect, useState } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
 import { motion, useScroll, useTransform, useInView } from "framer-motion";
 import * as THREE from "three";
@@ -95,7 +95,9 @@ function FlowingData() {
   const particlesRef = useRef<THREE.Points>(null);
   const count = 60;
 
-  const { positions, velocities, lanes } = useMemo(() => {
+  const [data, setData] = useState<{ positions: Float32Array; velocities: number[]; lanes: number[] } | null>(null);
+
+  useEffect(() => {
     const pos = new Float32Array(count * 3);
     const vel: number[] = [];
     const lns: number[] = [];
@@ -109,16 +111,18 @@ function FlowingData() {
       vel.push(0.02 + Math.random() * 0.03);
       lns.push(lane);
     }
-
-    return { positions: pos, velocities: vel, lanes: lns };
+    setTimeout(() => {
+      setData({ positions: pos, velocities: vel, lanes: lns });
+    }, 0);
   }, []);
 
   useFrame(() => {
-    if (!particlesRef.current) return;
+    if (!particlesRef.current || !data) return;
     const pos = particlesRef.current.geometry.attributes.position.array as Float32Array;
 
     for (let i = 0; i < count; i++) {
-      pos[i * 3] += velocities[i];
+      // Simple wrap around logic utilizing data.velocities
+      pos[i * 3] += data.velocities[i];
       if (pos[i * 3] > 4) {
         pos[i * 3] = -4;
       }
@@ -126,12 +130,14 @@ function FlowingData() {
     particlesRef.current.geometry.attributes.position.needsUpdate = true;
   });
 
+  if (!data) return null;
+
   return (
     <points ref={particlesRef}>
       <bufferGeometry>
         <bufferAttribute
           attach="attributes-position"
-          args={[positions, 3]}
+          args={[data.positions, 3]}
         />
       </bufferGeometry>
       <pointsMaterial
