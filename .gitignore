@@ -1,0 +1,118 @@
+# Tooling - binaries and build artifacts
+tooling/bin/
+tooling/llvm16/extracted/
+tooling/solang/target/
+tooling/**/*.tar.gz
+tooling/**/*.tar
+
+# Compiler build artifacts
+compiler/**/target/
+compiler/tva-compiler/target/
+compiler/**/target/**/*
+# Rust build intermediate files (in target dirs only)
+**/target/**/*.rlib
+**/target/**/*.rmeta
+**/target/**/*.d
+**/target/**/*.so
+**/target/**/*.o
+**/target/**/*.bc
+compiler/**/stubs/
+# LLVM extracted binaries (huge, don't track)
+compiler/llvm16/extracted/
+
+# Compiled contract artifacts
+artifacts/
+contracts/artifacts/
+*.wasm
+*.abi
+
+# Node modules
+node_modules/
+package-lock.json
+pnpm-lock.yaml
+
+# Rust build artifacts (general)
+target/
+**/target/
+# Only ignore Cargo.lock in build/target directories, keep root ones
+**/target/**/Cargo.lock
+
+# Environment and secrets
+.env
+.env.local
+.env.production
+.env.*.local
+*.key
+*.pem
+
+# IDE
+.vscode/
+.idea/
+*.iml
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+
+compiler/tva-compiler/tests/
+
+llvm16/
+
+# Logs
+*.log
+*.log.*
+logs/
+
+# Coverage
+coverage/
+.nyc_output/
+*.lcov
+
+# Python (dev scripts)
+__pycache__/
+*.py[cod]
+*.pyc
+*.pyo
+*.pyd
+.Python
+venv/
+.venv/
+env/
+ENV/
+
+# TypeScript/JavaScript build outputs
+dist/
+build/
+*.tsbuildinfo
+.next/
+out/
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.swp
+*.swo
+
+# Test artifacts
+test-results/
+playwright-report/
+playwright/.cache/
+
+# Documentation builds
+docs/_build/
+docs/.doctrees/
+docs/.venv/
+
+# Tooling (exclude from tracking)
+tooling/
+tva
+
+
