@@ -841,37 +841,48 @@ pub(super) fn expression<'a, T: TargetRuntime<'a> + ?Sized>(
         }
         Expression::Equal { left, right, .. } => {
             if left.ty().is_address() {
-                let mut res = bin.context.bool_type().const_int(1, false);
-                let left = expression(target, bin, left, vartab, function).into_array_value();
-                let right = expression(target, bin, right, vartab, function).into_array_value();
-
-                // TODO: Address should be passed around as pointer. Once this is done, we can replace
-                // this with a call to address_equal()
-                for index in 0..bin.ns.address_length {
-                    let l = bin
-                        .builder
-                        .build_extract_value(left, index as u32, "left")
+                if bin.ns.target == Target::Soroban {
+                    // Soroban: addresses are i64 values - compare directly
+                    let left = expression(target, bin, left, vartab, function).into_int_value();
+                    let right = expression(target, bin, right, vartab, function).into_int_value();
+                    bin.builder
+                        .build_int_compare(IntPredicate::EQ, left, right, "")
                         .unwrap()
-                        .into_int_value();
-                    let r = bin
-                        .builder
-                        .build_extract_value(right, index as u32, "right")
-                        .unwrap()
-                        .into_int_value();
+                        .into()
+                } else {
+                    // Other targets: addresses are byte arrays
+                    let mut res = bin.context.bool_type().const_int(1, false);
+                    let left = expression(target, bin, left, vartab, function).into_array_value();
+                    let right = expression(target, bin, right, vartab, function).into_array_value();
 
-                    res = bin
-                        .builder
-                        .build_and(
-                            res,
-                            bin.builder
-                                .build_int_compare(IntPredicate::EQ, l, r, "")
-                                .unwrap(),
-                            "cmp",
-                        )
-                        .unwrap();
+                    // TODO: Address should be passed around as pointer. Once this is done, we can replace
+                    // this with a call to address_equal()
+                    for index in 0..bin.ns.address_length {
+                        let l = bin
+                            .builder
+                            .build_extract_value(left, index as u32, "left")
+                            .unwrap()
+                            .into_int_value();
+                        let r = bin
+                            .builder
+                            .build_extract_value(right, index as u32, "right")
+                            .unwrap()
+                            .into_int_value();
+
+                        res = bin
+                            .builder
+                            .build_and(
+                                res,
+                                bin.builder
+                                    .build_int_compare(IntPredicate::EQ, l, r, "")
+                                    .unwrap(),
+                                "cmp",
+                            )
+                            .unwrap();
+                    }
+
+                    res.into()
                 }
-
-                res.into()
             } else {
                 let left = expression(target, bin, left, vartab, function).into_int_value();
                 let right = expression(target, bin, right, vartab, function).into_int_value();
@@ -884,37 +895,48 @@ pub(super) fn expression<'a, T: TargetRuntime<'a> + ?Sized>(
         }
         Expression::NotEqual { left, right, .. } => {
             if left.ty().is_address() {
-                let mut res = bin.context.bool_type().const_int(0, false);
-                let left = expression(target, bin, left, vartab, function).into_array_value();
-                let right = expression(target, bin, right, vartab, function).into_array_value();
-
-                // TODO: Address should be passed around as pointer. Once this is done, we can replace
-                // this with a call to address_equal()
-                for index in 0..bin.ns.address_length {
-                    let l = bin
-                        .builder
-                        .build_extract_value(left, index as u32, "left")
+                if bin.ns.target == Target::Soroban {
+                    // Soroban: addresses are i64 values - compare directly
+                    let left = expression(target, bin, left, vartab, function).into_int_value();
+                    let right = expression(target, bin, right, vartab, function).into_int_value();
+                    bin.builder
+                        .build_int_compare(IntPredicate::NE, left, right, "")
                         .unwrap()
-                        .into_int_value();
-                    let r = bin
-                        .builder
-                        .build_extract_value(right, index as u32, "right")
-                        .unwrap()
-                        .into_int_value();
+                        .into()
+                } else {
+                    // Other targets: addresses are byte arrays
+                    let mut res = bin.context.bool_type().const_int(0, false);
+                    let left = expression(target, bin, left, vartab, function).into_array_value();
+                    let right = expression(target, bin, right, vartab, function).into_array_value();
 
-                    res = bin
-                        .builder
-                        .build_or(
-                            res,
-                            bin.builder
-                                .build_int_compare(IntPredicate::NE, l, r, "")
-                                .unwrap(),
-                            "cmp",
-                        )
-                        .unwrap();
+                    // TODO: Address should be passed around as pointer. Once this is done, we can replace
+                    // this with a call to address_equal()
+                    for index in 0..bin.ns.address_length {
+                        let l = bin
+                            .builder
+                            .build_extract_value(left, index as u32, "left")
+                            .unwrap()
+                            .into_int_value();
+                        let r = bin
+                            .builder
+                            .build_extract_value(right, index as u32, "right")
+                            .unwrap()
+                            .into_int_value();
+
+                        res = bin
+                            .builder
+                            .build_or(
+                                res,
+                                bin.builder
+                                    .build_int_compare(IntPredicate::NE, l, r, "")
+                                    .unwrap(),
+                                "cmp",
+                            )
+                            .unwrap();
+                    }
+
+                    res.into()
                 }
-
-                res.into()
             } else {
                 let left = expression(target, bin, left, vartab, function).into_int_value();
                 let right = expression(target, bin, right, vartab, function).into_int_value();
@@ -2160,38 +2182,46 @@ pub(super) fn compare_address<'a, T: TargetRuntime<'a> + ?Sized>(
     vartab: &HashMap<usize, Variable<'a>>,
     function: FunctionValue<'a>,
 ) -> IntValue<'a> {
-    let l = expression(target, bin, left, vartab, function).into_array_value();
-    let r = expression(target, bin, right, vartab, function).into_array_value();
+    if bin.ns.target == Target::Soroban {
+        // Soroban: addresses are i64 values - compare directly
+        let l = expression(target, bin, left, vartab, function).into_int_value();
+        let r = expression(target, bin, right, vartab, function).into_int_value();
+        bin.builder.build_int_compare(op, l, r, "").unwrap()
+    } else {
+        // Other targets: addresses are byte arrays - use memcmp
+        let l = expression(target, bin, left, vartab, function).into_array_value();
+        let r = expression(target, bin, right, vartab, function).into_array_value();
 
-    let left = bin.build_alloca(function, bin.address_type(), "left");
-    let right = bin.build_alloca(function, bin.address_type(), "right");
+        let left = bin.build_alloca(function, bin.address_type(), "left");
+        let right = bin.build_alloca(function, bin.address_type(), "right");
 
-    bin.builder.build_store(left, l).unwrap();
-    bin.builder.build_store(right, r).unwrap();
+        bin.builder.build_store(left, l).unwrap();
+        bin.builder.build_store(right, r).unwrap();
 
-    let res = bin
-        .builder
-        .build_call(
-            bin.module.get_function("__memcmp_ord").unwrap(),
-            &[
-                left.into(),
-                right.into(),
-                bin.context
-                    .i32_type()
-                    .const_int(bin.ns.address_length as u64, false)
-                    .into(),
-            ],
-            "",
-        )
-        .unwrap()
-        .try_as_basic_value()
-        .left()
-        .unwrap()
-        .into_int_value();
+        let res = bin
+            .builder
+            .build_call(
+                bin.module.get_function("__memcmp_ord").unwrap(),
+                &[
+                    left.into(),
+                    right.into(),
+                    bin.context
+                        .i32_type()
+                        .const_int(bin.ns.address_length as u64, false)
+                        .into(),
+                ],
+                "",
+            )
+            .unwrap()
+            .try_as_basic_value()
+            .left()
+            .unwrap()
+            .into_int_value();
 
-    bin.builder
-        .build_int_compare(op, res, bin.context.i32_type().const_zero(), "")
-        .unwrap()
+        bin.builder
+            .build_int_compare(op, res, bin.context.i32_type().const_zero(), "")
+            .unwrap()
+    }
 }
 
 fn runtime_cast<'a>(

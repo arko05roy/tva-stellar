@@ -887,6 +887,14 @@ impl<'a> TargetRuntime<'a> for SorobanTarget {
 
                 value.into()
             }
+            Expression::Builtin {
+                kind: Builtin::Sender,
+                ..
+            } => {
+                // For Soroban, msg.sender is passed as _caller parameter (first function argument)
+                // The dispatch wrapper injects _caller as the first parameter for functions using msg.sender
+                function.get_nth_param(0).unwrap()
+            }
             _ => unimplemented!("unsupported builtin"),
         }
     }
