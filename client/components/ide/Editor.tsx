@@ -36,6 +36,9 @@ const SOROBAN_LINT_RULES: SorobanLintRule[] = [
     { pattern: /\bint16\b/, message: "int16 is rounded to int32 on Soroban. Use int32 or int64 instead.", severity: "warning", fix: { label: "Change to int32", replacement: "int32" } },
     { pattern: /\b\d+\s*\*\*\s*[a-zA-Z_]\w*/, message: "Exponentiation with variables can overflow on Soroban. Use literal values instead.", severity: "error" },
     { pattern: /\bbytes[1-9]\b|\bbytes[12][0-9]\b|\bbytes3[01]\b/, message: "Fixed-size bytes (bytes1-bytes31) have limited Soroban support. Use bytes32 or bytes.", severity: "warning", fix: { label: "Change to bytes32", replacement: "bytes32" } },
+    { pattern: /event\s+\w+\s*\([^)]*indexed\s+address/, message: "Events with 'indexed address' cause UnexpectedType on Soroban. Remove 'indexed' or avoid address topics.", severity: "error" },
+    { pattern: /\]\s*\+=/, message: "'+=' on mapping entries fails if the key was never initialized on Soroban. Use explicit assignment instead.", severity: "warning" },
+    { pattern: /require\s*\([^,]+,\s*"/, message: "require() with string messages may not work on Soroban. Use if-return pattern instead.", severity: "warning" },
 ];
 
 // Quick fix provider for Soroban lint markers

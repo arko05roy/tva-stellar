@@ -171,46 +171,39 @@ contract Greeter {
         content: `// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
+// Soroban-compatible ERC20 Token
+// Note: Events with indexed address and reading uninitialized
+// mapping entries are not supported on Soroban.
 contract Token {
     string public name;
     string public symbol;
     uint128 public totalSupply;
-
-    mapping(address => uint128) public balanceOf;
-    mapping(address => mapping(address => uint128)) public allowance;
-
-    event Transfer(address indexed from, address indexed to, uint128 value);
-    event Approval(address indexed owner, address indexed spender, uint128 value);
+    address public owner;
+    uint128 public ownerBalance;
 
     constructor(string memory _name, string memory _symbol, uint128 _initialSupply) {
         name = _name;
         symbol = _symbol;
         totalSupply = _initialSupply;
-        balanceOf[msg.sender] = _initialSupply;
+        owner = msg.sender;
+        ownerBalance = _initialSupply;
     }
 
-    function transfer(address to, uint128 amount) public returns (bool) {
-        require(balanceOf[msg.sender] >= amount, "Insufficient balance");
-        balanceOf[msg.sender] -= amount;
-        balanceOf[to] += amount;
-        emit Transfer(msg.sender, to, amount);
-        return true;
+    function mint(uint128 amount) public {
+        totalSupply += amount;
+        ownerBalance += amount;
     }
 
-    function approve(address spender, uint128 amount) public returns (bool) {
-        allowance[msg.sender][spender] = amount;
-        emit Approval(msg.sender, spender, amount);
-        return true;
+    function burn(uint128 amount) public {
+        if (ownerBalance < amount) {
+            return;
+        }
+        totalSupply -= amount;
+        ownerBalance -= amount;
     }
 
-    function transferFrom(address from, address to, uint128 amount) public returns (bool) {
-        require(balanceOf[from] >= amount, "Insufficient balance");
-        require(allowance[from][msg.sender] >= amount, "Insufficient allowance");
-        balanceOf[from] -= amount;
-        balanceOf[to] += amount;
-        allowance[from][msg.sender] -= amount;
-        emit Transfer(from, to, amount);
-        return true;
+    function getOwnerBalance() public view returns (uint128) {
+        return ownerBalance;
     }
 }
 `
