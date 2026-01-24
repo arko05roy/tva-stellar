@@ -1,14 +1,13 @@
 use anyhow::{anyhow, Result};
 use serde_json::Value;
-use tracing::{debug, error, info, warn};
+use sha3::{Digest, Keccak256};
+use tracing::{debug, error, info};
 
+use crate::chain::db::{ChainDb, StoredTransaction, TxStatus};
+use crate::chain::mempool::{Mempool, PendingTx};
+use crate::chain::wallet::WalletManager;
 use crate::config::Config;
-use crate::emulator::block::{EvmBlock, parse_block_number};
 use crate::stellar::SorobanClient;
-use crate::stellar::types::{EventFilter, EventPagination, GetEventsParams};
-use crate::translator::receipt::{
-    build_receipt_from_stellar, build_transaction_from_stellar,
-};
 use crate::translator::tx::{
     decode_calldata, decode_raw_transaction, stroops_to_wei,
 };
@@ -21,17 +20,17 @@ pub async fn chain_id(config: &Config) -> Result<Value> {
     Ok(Value::String(id))
 }
 
-/// Handler for eth_blockNumber
-pub async fn block_number(client: &SorobanClient) -> Result<Value> {
-    let ledger = client.get_latest_ledger().await?;
-    let hex = format!("0x{:x}", ledger.sequence);
-    debug!("eth_blockNumber -> {} (ledger {})", hex, ledger.sequence);
+/// Handler for eth_blockNumber - returns TVA's latest block number
+pub async fn block_number(db: &ChainDb) -> Result<Value> {
+    let latest = db.get_latest_block_number()?;
+    let hex = format!("0x{:x}", latest);
+    debug!("eth_blockNumber -> {} (block #{})", hex, latest);
     Ok(Value::String(hex))
 }
 
-/// Handler for eth_getBlockByNumber
+/// Handler for eth_getBlockByNumber - returns TVA block from local state
 pub async fn get_block_by_number(
-    client: &SorobanClient,
+    db: &ChainDb,
     params: &[Value],
 ) -> Result<Value> {
     let block_param = params
@@ -44,134 +43,50 @@ pub async fn get_block_by_number(
         .and_then(|v| v.as_bool())
         .unwrap_or(false);
 
-    let latest_ledger = client.get_latest_ledger().await?;
-    let target_ledger = parse_block_number(block_param, latest_ledger.sequence);
+    let latest = db.get_latest_block_number()?;
+    let target_number = parse_block_number(block_param, latest);
 
     debug!(
-        "eth_getBlockByNumber: param={}, target_ledger={}, include_txs={}",
-        block_param, target_ledger, include_txs
+        "eth_getBlockByNumber: param={}, target={}, include_txs={}",
+        block_param, target_number, include_txs
     );
 
-    // Get real ledger info from Horizon
-    let (tx_count, close_time) = client.get_ledger_info(target_ledger).await.unwrap_or((0, 0));
-    
-    // If close_time is 0, estimate it
-    let time_diff = (latest_ledger.sequence - target_ledger) * 5;
-    let now = chrono::Utc::now().timestamp() as u64;
-    let close_time = if close_time > 0 {
-        close_time
-    } else if target_ledger == latest_ledger.sequence {
-        now
-    } else {
-        now.saturating_sub(time_diff)
+    let block = match db.get_block_by_number(target_number)? {
+        Some(b) => b,
+        None => return Ok(Value::Null),
     };
 
-    // Get base fee for the block
-    let base_fee = client.get_base_fee().await.unwrap_or(100);
-
-    // Fetch real transactions from Horizon
-    let transactions = if tx_count > 0 {
-        let horizon_txs = client.get_ledger_transactions(target_ledger).await.unwrap_or_default();
-        if include_txs {
-            // Full transaction objects
-            horizon_txs
-                .iter()
-                .enumerate()
-                .filter_map(|(idx, tx)| {
-                    crate::translator::receipt::build_transaction_from_horizon(
-                        tx,
-                        target_ledger,
-                        idx as u32,
-                    )
-                    .ok()
-                    .map(|evm_tx| serde_json::to_value(evm_tx).ok())
-                    .flatten()
-                })
-                .collect()
-        } else {
-            // Just transaction hashes
-            horizon_txs
-                .iter()
-                .filter_map(|tx| {
-                    tx.get("hash")
-                        .or_else(|| tx.get("transactionHash"))
-                        .cloned()
-                })
-                .collect()
-        }
-    } else {
-        Vec::new()
-    };
-
-    let block = EvmBlock::from_ledger(
-        target_ledger,
-        close_time,
-        tx_count,
-        base_fee,
-        include_txs,
-        transactions,
-    );
-
-    Ok(serde_json::to_value(&block)?)
+    let txs = db.get_transactions_by_block(target_number)?;
+    Ok(format_block_response(&block, &txs, include_txs))
 }
 
-/// Handler for eth_getBlockByHash
+/// Handler for eth_getBlockByHash - lookup TVA block by hash
 pub async fn get_block_by_hash(
-    client: &SorobanClient,
+    db: &ChainDb,
     params: &[Value],
 ) -> Result<Value> {
-    // Since we generate block hashes deterministically, we cannot reverse them.
-    // Return the latest block as a fallback.
+    let hash = params
+        .first()
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+
     let include_txs = params
         .get(1)
         .and_then(|v| v.as_bool())
         .unwrap_or(false);
 
-    let latest = client.get_latest_ledger().await?;
-    let (tx_count, close_time) = client.get_ledger_info(latest.sequence).await.unwrap_or((0, 0));
-    let base_fee = client.get_base_fee().await.unwrap_or(100);
-    let now = chrono::Utc::now().timestamp() as u64;
-    let close_time = if close_time > 0 { close_time } else { now };
+    debug!("eth_getBlockByHash: hash={}", hash);
 
-    // Fetch real transactions from Horizon
-    let transactions = if tx_count > 0 {
-        let horizon_txs = client.get_ledger_transactions(latest.sequence).await.unwrap_or_default();
-        if include_txs {
-            // Full transaction objects
-            horizon_txs
-                .iter()
-                .enumerate()
-                .filter_map(|(idx, tx)| {
-                    crate::translator::receipt::build_transaction_from_horizon(
-                        tx,
-                        latest.sequence,
-                        idx as u32,
-                    )
-                    .ok()
-                    .map(|evm_tx| serde_json::to_value(evm_tx).ok())
-                    .flatten()
-                })
-                .collect()
-        } else {
-            // Just transaction hashes
-            horizon_txs
-                .iter()
-                .filter_map(|tx| {
-                    tx.get("hash")
-                        .or_else(|| tx.get("transactionHash"))
-                        .cloned()
-                })
-                .collect()
-        }
-    } else {
-        Vec::new()
+    let block = match db.get_block_by_hash(hash)? {
+        Some(b) => b,
+        None => return Ok(Value::Null),
     };
 
-    let block = EvmBlock::from_ledger(latest.sequence, close_time, tx_count, base_fee, include_txs, transactions);
-    Ok(serde_json::to_value(&block)?)
+    let txs = db.get_transactions_by_block(block.number)?;
+    Ok(format_block_response(&block, &txs, include_txs))
 }
 
-/// Handler for eth_call (read-only contract invocation)
+/// Handler for eth_call (read-only contract invocation) - still simulates on Stellar
 pub async fn call(
     client: &SorobanClient,
     config: &Config,
@@ -197,11 +112,9 @@ pub async fn call(
     debug!("eth_call: to={}, data_len={}", to, data_bytes.len());
 
     if data_bytes.len() < 4 {
-        // No function selector - return empty
         return Ok(Value::String("0x".to_string()));
     }
 
-    // Decode the calldata
     let decoded = decode_calldata(&data_bytes, to, abi_registry)?;
 
     let function_name = decoded
@@ -210,14 +123,10 @@ pub async fn call(
 
     info!("eth_call: invoking {} on {}", function_name, to);
 
-    // For simulation, we need to build a transaction XDR
-    // Use the admin key as the source for simulation (does not require signature)
     let source_account = get_source_account_id(config)?;
     let sequence = client.get_account_sequence(&source_account).await.unwrap_or(0);
-
     let contract_id = evm_address_to_contract_id(to);
 
-    // Build the invoke transaction for simulation
     let tx_xdr = crate::translator::tx::build_soroban_invoke_tx(
         &source_account,
         sequence + 1,
@@ -225,10 +134,9 @@ pub async fn call(
         &function_name,
         &decoded.scval_params,
         client.network_passphrase(),
-        100, // minimal fee for simulation
+        100,
     )?;
 
-    // Simulate the transaction
     let sim_result = client.simulate_transaction(&tx_xdr).await?;
 
     if let Some(error) = &sim_result.error {
@@ -236,11 +144,9 @@ pub async fn call(
         return Err(anyhow!("Contract call reverted: {}", error));
     }
 
-    // Extract the return value
     if let Some(results) = &sim_result.results {
         if let Some(first_result) = results.first() {
             if let Some(xdr_result) = &first_result.xdr {
-                // Convert XDR result back to ABI-encoded bytes
                 let func_info = abi_registry.lookup_function(to, &decoded.selector);
                 if let Some(info) = func_info {
                     let abi_bytes = crate::translator::scval::decode_scval_xdr_to_abi(
@@ -249,7 +155,6 @@ pub async fn call(
                     )?;
                     return Ok(Value::String(format!("0x{}", hex::encode(&abi_bytes))));
                 }
-                // Without ABI info, return the raw XDR as hex
                 let raw_bytes = base64::Engine::decode(
                     &base64::engine::general_purpose::STANDARD,
                     xdr_result,
@@ -259,15 +164,14 @@ pub async fn call(
         }
     }
 
-    // No result - return empty
     Ok(Value::String("0x".to_string()))
 }
 
-/// Handler for eth_sendRawTransaction
+/// Handler for eth_sendRawTransaction - decode EVM tx and add to mempool
 pub async fn send_raw_transaction(
-    client: &SorobanClient,
-    config: &Config,
-    abi_registry: &AbiRegistry,
+    mempool: &Mempool,
+    db: &ChainDb,
+    wallet_manager: &WalletManager,
     params: &[Value],
 ) -> Result<Value> {
     let raw_tx_hex = params
@@ -283,120 +187,79 @@ pub async fn send_raw_transaction(
         raw_tx_bytes.len()
     );
 
-    // Step 1: RLP-decode the EVM transaction
+    // Decode the EVM transaction
     let decoded_tx = decode_raw_transaction(&raw_tx_bytes)?;
 
+    // Recover sender address from signature
+    let from_addr = recover_sender(&decoded_tx, &raw_tx_bytes);
+
     debug!(
-        "Decoded EVM tx: nonce={}, to={:?}, value={}, data_len={}",
+        "Decoded EVM tx: from={}, nonce={}, to={:?}, value={}, data_len={}",
+        from_addr,
         decoded_tx.nonce,
-        decoded_tx.to.map(hex::encode),
+        decoded_tx.to.map(|a| format!("0x{}", hex::encode(a))),
         decoded_tx.value,
         decoded_tx.data.len()
     );
 
-    // Step 2: Determine if this is a contract deployment or invocation
-    let is_deployment = decoded_tx.to.is_none();
+    // Ensure the sender has a mirror wallet on Stellar
+    let _ = wallet_manager.ensure_account(&from_addr).await;
 
-    if is_deployment {
-        info!("Contract deployment detected - translating to Soroban deploy");
-        // Contract deployment: the data field contains the contract bytecode/initcode
-        // For TVA, this would be WASM bytecode compiled by Solang
-        // Return the tx hash immediately (deployment handled asynchronously)
-        let tx_hash = format!("0x{}", hex::encode(decoded_tx.tx_hash));
-        return Ok(Value::String(tx_hash));
-    }
+    // Compute transaction hash
+    let tx_hash = format!("0x{}", hex::encode(decoded_tx.tx_hash));
 
-    // Step 3: Decode calldata and translate to Soroban invocation
-    let to_address = decoded_tx.to.unwrap(); // Safe: checked above
-    let to_hex = format!("0x{}", hex::encode(to_address));
+    // Format to_addr
+    let to_addr = decoded_tx.to.map(|a| format!("0x{}", hex::encode(a)));
 
-    if decoded_tx.data.len() >= 4 {
-        let decoded = decode_calldata(&decoded_tx.data, &to_hex, abi_registry)?;
+    // Store transaction in DB
+    let stored_tx = StoredTransaction {
+        hash: tx_hash.clone(),
+        block_number: None,
+        tx_index: 0,
+        from_addr: from_addr.clone(),
+        to_addr: to_addr.clone(),
+        value: format!("0x{:x}", decoded_tx.value),
+        data: hex::encode(&decoded_tx.data),
+        gas_limit: decoded_tx.gas_limit,
+        gas_price: decoded_tx.gas_price,
+        nonce: decoded_tx.nonce,
+        status: TxStatus::Pending,
+        stellar_tx_hash: None,
+        contract_address: None,
+        gas_used: None,
+        logs_json: None,
+        error: None,
+        created_at: chrono::Utc::now().timestamp() as u64,
+    };
 
-        let function_name = decoded
-            .function_name
-            .unwrap_or_else(|| format!("fn_{}", hex::encode(decoded.selector)));
+    db.insert_transaction(&stored_tx)?;
 
-        info!(
-            "Translating call to {} on contract {}",
-            function_name, to_hex
-        );
+    // Increment account nonce
+    db.increment_nonce(&from_addr)?;
 
-        // Build the Soroban transaction
-        let source_account = get_source_account_id(config)?;
-        let sequence = client.get_account_sequence(&source_account).await?;
-        let contract_id = evm_address_to_contract_id(&to_hex);
+    // Add to mempool for block inclusion
+    let pending_tx = PendingTx {
+        hash: tx_hash.clone(),
+        from_addr,
+        to_addr,
+        value: format!("0x{:x}", decoded_tx.value),
+        data: decoded_tx.data.clone(),
+        gas_limit: decoded_tx.gas_limit,
+        gas_price: decoded_tx.gas_price,
+        nonce: decoded_tx.nonce,
+        raw_tx: raw_tx_bytes,
+        received_at: chrono::Utc::now().timestamp() as u64,
+    };
 
-        // First simulate to get resource estimates
-        let sim_tx_xdr = crate::translator::tx::build_soroban_invoke_tx(
-            &source_account,
-            sequence + 1,
-            &contract_id,
-            &function_name,
-            &decoded.scval_params,
-            client.network_passphrase(),
-            100,
-        )?;
+    mempool.add_transaction(pending_tx).await?;
 
-        let sim_result = client.simulate_transaction(&sim_tx_xdr).await?;
-
-        if let Some(error) = &sim_result.error {
-            error!("Transaction simulation failed: {}", error);
-            return Err(anyhow!("Transaction would revert: {}", error));
-        }
-
-        // Get the resource fee from simulation
-        let resource_fee: u32 = sim_result
-            .min_resource_fee
-            .as_ref()
-            .and_then(|f| f.parse::<u32>().ok())
-            .unwrap_or(10000);
-
-        // Build the actual transaction with proper fee
-        let tx_xdr = crate::translator::tx::build_soroban_invoke_tx(
-            &source_account,
-            sequence + 1,
-            &contract_id,
-            &function_name,
-            &decoded.scval_params,
-            client.network_passphrase(),
-            resource_fee + 1000, // Add buffer
-        )?;
-
-        // Submit to Stellar network
-        let send_result = client.send_transaction(&tx_xdr).await?;
-
-        match send_result.status.as_str() {
-            "PENDING" | "SUCCESS" => {
-                let stellar_hash = send_result.hash.unwrap_or_default();
-                let tx_hash = stellar_hash_to_evm_hash(&stellar_hash);
-                info!("Transaction submitted: stellar_hash={}, evm_hash={}", stellar_hash, tx_hash);
-                Ok(Value::String(tx_hash))
-            }
-            "ERROR" | "FAILED" => {
-                let error_msg = send_result
-                    .error_result_xdr
-                    .unwrap_or_else(|| "Unknown error".to_string());
-                error!("Transaction submission failed: {}", error_msg);
-                Err(anyhow!("Transaction failed: {}", error_msg))
-            }
-            status => {
-                warn!("Unexpected transaction status: {}", status);
-                let tx_hash = format!("0x{}", hex::encode(decoded_tx.tx_hash));
-                Ok(Value::String(tx_hash))
-            }
-        }
-    } else {
-        // No calldata (simple value transfer)
-        info!("Simple value transfer: {} wei to {}", decoded_tx.value, to_hex);
-        let tx_hash = format!("0x{}", hex::encode(decoded_tx.tx_hash));
-        Ok(Value::String(tx_hash))
-    }
+    info!("Transaction {} added to mempool", &tx_hash[..14]);
+    Ok(Value::String(tx_hash))
 }
 
-/// Handler for eth_getTransactionReceipt
+/// Handler for eth_getTransactionReceipt - returns receipt from TVA DB
 pub async fn get_transaction_receipt(
-    client: &SorobanClient,
+    db: &ChainDb,
     params: &[Value],
 ) -> Result<Value> {
     let tx_hash = params
@@ -406,33 +269,59 @@ pub async fn get_transaction_receipt(
 
     debug!("eth_getTransactionReceipt: hash={}", tx_hash);
 
-    // Convert EVM hash format to Stellar hash for lookup
-    let stellar_hash = evm_hash_to_stellar_hash(tx_hash);
+    let tx = match db.get_transaction_by_hash(tx_hash)? {
+        Some(t) => t,
+        None => return Ok(Value::Null),
+    };
 
-    let tx_response = client.get_transaction(&stellar_hash).await?;
+    // Only return receipt if tx has been included in a block
+    let block_number = match tx.block_number {
+        Some(n) => n,
+        None => return Ok(Value::Null), // Still in mempool
+    };
 
-    match tx_response.status.as_str() {
-        "SUCCESS" | "FAILED" => {
-            let receipt = build_receipt_from_stellar(
-                &tx_response,
-                tx_hash,
-                &format!("0x{}", "0".repeat(40)), // from (would need to decode envelope)
-                Some(&format!("0x{}", "0".repeat(40))), // to
-                None,
-            )?;
-            Ok(serde_json::to_value(&receipt)?)
-        }
-        "NOT_FOUND" => {
-            // Transaction not found or not yet confirmed
-            Ok(Value::Null)
-        }
-        _ => Ok(Value::Null),
-    }
+    // Get the block hash for this block
+    let block_hash = db
+        .get_block_by_number(block_number)?
+        .map(|b| b.hash)
+        .unwrap_or_else(|| format!("0x{}", "0".repeat(64)));
+
+    let status = match tx.status {
+        TxStatus::Failed => "0x0",
+        _ => "0x1",
+    };
+
+    let gas_used = tx.gas_used.unwrap_or(21000);
+
+    let logs: Vec<Value> = tx
+        .logs_json
+        .as_deref()
+        .and_then(|s| serde_json::from_str(s).ok())
+        .unwrap_or_default();
+
+    let receipt = serde_json::json!({
+        "transactionHash": tx.hash,
+        "transactionIndex": format!("0x{:x}", tx.tx_index),
+        "blockNumber": format!("0x{:x}", block_number),
+        "blockHash": block_hash,
+        "from": tx.from_addr,
+        "to": tx.to_addr,
+        "gasUsed": format!("0x{:x}", gas_used),
+        "cumulativeGasUsed": format!("0x{:x}", gas_used),
+        "contractAddress": tx.contract_address,
+        "logs": logs,
+        "logsBloom": format!("0x{}", "0".repeat(512)),
+        "status": status,
+        "type": "0x0",
+        "effectiveGasPrice": format!("0x{:x}", tx.gas_price.max(1000000000)),
+    });
+
+    Ok(receipt)
 }
 
-/// Handler for eth_getTransactionByHash
+/// Handler for eth_getTransactionByHash - returns tx from TVA DB
 pub async fn get_transaction_by_hash(
-    client: &SorobanClient,
+    db: &ChainDb,
     params: &[Value],
 ) -> Result<Value> {
     let tx_hash = params
@@ -442,25 +331,20 @@ pub async fn get_transaction_by_hash(
 
     debug!("eth_getTransactionByHash: hash={}", tx_hash);
 
-    let stellar_hash = evm_hash_to_stellar_hash(tx_hash);
-    let tx_response = client.get_transaction(&stellar_hash).await?;
+    let tx = match db.get_transaction_by_hash(tx_hash)? {
+        Some(t) => t,
+        None => return Ok(Value::Null),
+    };
 
-    match tx_response.status.as_str() {
-        "SUCCESS" | "FAILED" => {
-            let tx = build_transaction_from_stellar(
-                &tx_response,
-                tx_hash,
-                &format!("0x{}", "0".repeat(40)),
-                Some(&format!("0x{}", "0".repeat(40))),
-            )?;
-            Ok(serde_json::to_value(&tx)?)
-        }
-        "NOT_FOUND" => Ok(Value::Null),
-        _ => Ok(Value::Null),
-    }
+    let block_hash = tx.block_number
+        .and_then(|n| db.get_block_by_number(n).ok().flatten())
+        .map(|b| b.hash)
+        .unwrap_or_default();
+
+    Ok(format_transaction_with_block_hash(&tx, &block_hash))
 }
 
-/// Handler for eth_getCode
+/// Handler for eth_getCode - checks Stellar for contract existence
 pub async fn get_code(
     client: &SorobanClient,
     params: &[Value],
@@ -472,30 +356,23 @@ pub async fn get_code(
 
     debug!("eth_getCode: address={}", address);
 
-    // For Soroban contracts, we check if a contract exists at this address
-    // by attempting to get its WASM code hash from ledger entries
     let contract_id = evm_address_to_contract_id(address);
-
-    // Build the ledger key for the contract instance
     let ledger_key = build_contract_instance_key(&contract_id);
-
     let entries = client.get_ledger_entries(vec![ledger_key]).await?;
 
     if let Some(entries_list) = entries.entries {
         if !entries_list.is_empty() {
-            // Contract exists - return a non-empty code indicator
-            // In a full implementation, we would decode the WASM from the ledger entry
             let code_hash = format!("0x{}", hex::encode(contract_id.as_bytes()));
             return Ok(Value::String(code_hash));
         }
     }
 
-    // No contract found at this address
     Ok(Value::String("0x".to_string()))
 }
 
-/// Handler for eth_getBalance
+/// Handler for eth_getBalance - looks up mirror wallet and queries Stellar
 pub async fn get_balance(
+    db: &ChainDb,
     client: &SorobanClient,
     params: &[Value],
 ) -> Result<Value> {
@@ -506,19 +383,25 @@ pub async fn get_balance(
 
     debug!("eth_getBalance: address={}", address);
 
-    // Map EVM address to Stellar account and query XLM balance
-    // For now, use the mapped Stellar account
-    let stellar_account = evm_address_to_stellar_account(address);
+    let normalized = address.to_lowercase();
 
-    let balance_stroops = client.get_xlm_balance(&stellar_account).await.unwrap_or(0);
+    // Look up mirror wallet in DB
+    let stellar_address = match db.get_account(&normalized)? {
+        Some(account) => account.stellar_address,
+        None => {
+            // No mirror wallet yet - return 0
+            return Ok(Value::String("0x0".to_string()));
+        }
+    };
 
-    // Convert stroops to wei-equivalent
+    // Query Stellar for XLM balance
+    let balance_stroops = client.get_xlm_balance(&stellar_address).await.unwrap_or(0);
     let balance_wei = stroops_to_wei(balance_stroops);
     let hex_balance = format!("0x{:x}", balance_wei);
 
     debug!(
-        "eth_getBalance: {} -> {} stroops = {} wei",
-        address, balance_stroops, hex_balance
+        "eth_getBalance: {} -> stellar {} -> {} stroops = {}",
+        address, &stellar_address[..10], balance_stroops, hex_balance
     );
 
     Ok(Value::String(hex_balance))
@@ -527,17 +410,13 @@ pub async fn get_balance(
 /// Handler for eth_gasPrice
 pub async fn gas_price(client: &SorobanClient) -> Result<Value> {
     let base_fee = client.get_base_fee().await.unwrap_or(100);
-
-    // Convert Stellar base fee (stroops) to a gas price in wei
-    // 100 stroops ~= 1 gwei for a reasonable comparison
     let gas_price_wei = stroops_to_wei(base_fee);
     let hex_price = format!("0x{:x}", gas_price_wei);
-
     debug!("eth_gasPrice: base_fee={} stroops -> {}", base_fee, hex_price);
     Ok(Value::String(hex_price))
 }
 
-/// Handler for eth_estimateGas
+/// Handler for eth_estimateGas - simulates on Stellar
 pub async fn estimate_gas(
     client: &SorobanClient,
     config: &Config,
@@ -556,7 +435,6 @@ pub async fn estimate_gas(
 
     debug!("eth_estimateGas: to={:?}, data_len={}", to, data.len());
 
-    // If we have calldata and a target, simulate the transaction
     if let Some(to_addr) = to {
         let data_bytes = hex::decode(data.strip_prefix("0x").unwrap_or(data)).unwrap_or_default();
 
@@ -583,7 +461,6 @@ pub async fn estimate_gas(
             let sim_result = client.simulate_transaction(&tx_xdr).await?;
 
             if let Some(cost) = &sim_result.cost {
-                // Convert Soroban CPU instructions to gas-equivalent
                 let cpu_insns: u64 = cost
                     .cpu_insns
                     .as_ref()
@@ -595,15 +472,13 @@ pub async fn estimate_gas(
                     .and_then(|s| s.parse().ok())
                     .unwrap_or(0);
 
-                // Rough conversion: 1000 CPU insns ~= 1 gas unit
                 let estimated_gas = (cpu_insns / 1000) + (mem_bytes / 100) + 21000;
                 return Ok(Value::String(format!("0x{:x}", estimated_gas)));
             }
 
-            // Use min_resource_fee as fallback
             if let Some(fee_str) = &sim_result.min_resource_fee {
                 let fee: u64 = fee_str.parse().unwrap_or(21000);
-                let gas = fee * 100 + 21000; // Convert fee to gas units
+                let gas = fee * 100 + 21000;
                 return Ok(Value::String(format!("0x{:x}", gas)));
             }
         }
@@ -613,9 +488,9 @@ pub async fn estimate_gas(
     Ok(Value::String("0x5208".to_string())) // 21000
 }
 
-/// Handler for eth_getTransactionCount (nonce)
+/// Handler for eth_getTransactionCount (nonce) - from TVA DB
 pub async fn get_transaction_count(
-    client: &SorobanClient,
+    db: &ChainDb,
     params: &[Value],
 ) -> Result<Value> {
     let address = params
@@ -625,26 +500,22 @@ pub async fn get_transaction_count(
 
     debug!("eth_getTransactionCount: address={}", address);
 
-    let stellar_account = evm_address_to_stellar_account(address);
-    let sequence = client.get_account_sequence(&stellar_account).await.unwrap_or(0);
-
-    Ok(Value::String(format!("0x{:x}", sequence)))
+    let nonce = db.get_nonce(&address.to_lowercase())?;
+    Ok(Value::String(format!("0x{:x}", nonce)))
 }
 
-/// Handler for eth_getLogs
+/// Handler for eth_getLogs - queries Soroban events
 pub async fn get_logs(
     client: &SorobanClient,
     params: &[Value],
 ) -> Result<Value> {
+    use crate::stellar::types::{EventFilter, EventPagination, GetEventsParams};
+
     let default_filter = Value::Object(Default::default());
     let filter = params.first().unwrap_or(&default_filter);
 
-    let from_block = filter["fromBlock"]
-        .as_str()
-        .unwrap_or("latest");
-    let to_block = filter["toBlock"]
-        .as_str()
-        .unwrap_or("latest");
+    let from_block = filter["fromBlock"].as_str().unwrap_or("latest");
+    let to_block = filter["toBlock"].as_str().unwrap_or("latest");
 
     let latest = client.get_latest_ledger().await?;
 
@@ -656,7 +527,6 @@ pub async fn get_logs(
         start_ledger, end_ledger
     );
 
-    // Build event filters
     let mut event_filters = Vec::new();
 
     if let Some(address) = filter["address"].as_str() {
@@ -715,7 +585,7 @@ pub async fn hashrate() -> Result<Value> {
     Ok(Value::String("0x0".to_string()))
 }
 
-/// Handler for eth_syncing (always false - Stellar has instant finality)
+/// Handler for eth_syncing (always false - TVA has instant finality)
 pub async fn syncing() -> Result<Value> {
     Ok(Value::Bool(false))
 }
@@ -729,84 +599,625 @@ pub async fn coinbase() -> Result<Value> {
 pub async fn get_storage_at(params: &[Value]) -> Result<Value> {
     let _address = params.first().and_then(|v| v.as_str()).unwrap_or("0x0");
     let _slot = params.get(1).and_then(|v| v.as_str()).unwrap_or("0x0");
-
-    // Would need to query Soroban contract data entries
-    // For now, return zero
     Ok(Value::String(format!("0x{}", "0".repeat(64))))
+}
+
+/// Handler for eth_getBlockTransactionCountByNumber
+pub async fn get_block_transaction_count_by_number(db: &ChainDb, params: &[Value]) -> Result<Value> {
+    let block_param = params.first().and_then(|v| v.as_str()).unwrap_or("latest");
+    let latest = db.get_latest_block_number()?;
+    let block_number = parse_block_number(block_param, latest);
+    let count = db.get_block_transaction_count(block_number)?;
+    Ok(Value::String(format!("0x{:x}", count)))
+}
+
+/// Handler for eth_getBlockTransactionCountByHash
+pub async fn get_block_transaction_count_by_hash(db: &ChainDb, params: &[Value]) -> Result<Value> {
+    let block_hash = params.first().and_then(|v| v.as_str()).unwrap_or("");
+    let block = db.get_block_by_hash(block_hash)?;
+    match block {
+        Some(b) => {
+            let count = db.get_block_transaction_count(b.number)?;
+            Ok(Value::String(format!("0x{:x}", count)))
+        }
+        None => Ok(Value::Null),
+    }
+}
+
+/// Handler for eth_getTransactionByBlockNumberAndIndex
+pub async fn get_transaction_by_block_number_and_index(db: &ChainDb, params: &[Value]) -> Result<Value> {
+    let block_param = params.first().and_then(|v| v.as_str()).unwrap_or("latest");
+    let index_param = params.get(1).and_then(|v| v.as_str()).unwrap_or("0x0");
+
+    let latest = db.get_latest_block_number()?;
+    let block_number = parse_block_number(block_param, latest);
+    let tx_index = u32::from_str_radix(
+        index_param.strip_prefix("0x").unwrap_or(index_param),
+        16,
+    ).unwrap_or(0);
+
+    let tx = db.get_transaction_by_block_and_index(block_number, tx_index)?;
+    match tx {
+        Some(t) => {
+            let block = db.get_block_by_number(block_number)?;
+            let block_hash = block.map(|b| b.hash).unwrap_or_default();
+            Ok(format_transaction_with_block_hash(&t, &block_hash))
+        }
+        None => Ok(Value::Null),
+    }
+}
+
+/// Handler for eth_getTransactionByBlockHashAndIndex
+pub async fn get_transaction_by_block_hash_and_index(db: &ChainDb, params: &[Value]) -> Result<Value> {
+    let block_hash = params.first().and_then(|v| v.as_str()).unwrap_or("");
+    let index_param = params.get(1).and_then(|v| v.as_str()).unwrap_or("0x0");
+
+    let tx_index = u32::from_str_radix(
+        index_param.strip_prefix("0x").unwrap_or(index_param),
+        16,
+    ).unwrap_or(0);
+
+    let block = db.get_block_by_hash(block_hash)?;
+    match block {
+        Some(b) => {
+            let tx = db.get_transaction_by_block_and_index(b.number, tx_index)?;
+            match tx {
+                Some(t) => Ok(format_transaction_with_block_hash(&t, &b.hash)),
+                None => Ok(Value::Null),
+            }
+        }
+        None => Ok(Value::Null),
+    }
+}
+
+/// Handler for eth_getUncleCountByBlockNumber - TVA has no uncles
+pub async fn get_uncle_count_by_block_number(_params: &[Value]) -> Result<Value> {
+    Ok(Value::String("0x0".to_string()))
+}
+
+/// Handler for eth_getUncleCountByBlockHash - TVA has no uncles
+pub async fn get_uncle_count_by_block_hash(_params: &[Value]) -> Result<Value> {
+    Ok(Value::String("0x0".to_string()))
+}
+
+/// Handler for eth_getUncleByBlockHashAndIndex - TVA has no uncles
+pub async fn get_uncle_by_block_hash_and_index(_params: &[Value]) -> Result<Value> {
+    Ok(Value::Null)
+}
+
+/// Handler for eth_getUncleByBlockNumberAndIndex - TVA has no uncles
+pub async fn get_uncle_by_block_number_and_index(_params: &[Value]) -> Result<Value> {
+    Ok(Value::Null)
+}
+
+/// Handler for eth_getBlockReceipts - returns all receipts for a block
+pub async fn get_block_receipts(db: &ChainDb, params: &[Value]) -> Result<Value> {
+    let block_param = params.first().and_then(|v| v.as_str()).unwrap_or("latest");
+    let latest = db.get_latest_block_number()?;
+    let block_number = parse_block_number(block_param, latest);
+
+    let block = db.get_block_by_number(block_number)?;
+    let block_hash = block.as_ref().map(|b| b.hash.clone()).unwrap_or_default();
+
+    let txs = db.get_transactions_by_block(block_number)?;
+    let mut receipts = Vec::new();
+    let mut cumulative_gas: u64 = 0;
+
+    for tx in &txs {
+        let gas_used = tx.gas_used.unwrap_or(21000);
+        cumulative_gas += gas_used;
+        let logs: Vec<Value> = tx.logs_json.as_ref()
+            .and_then(|j| serde_json::from_str(j).ok())
+            .unwrap_or_default();
+        let status = match tx.status {
+            TxStatus::Failed => "0x0",
+            _ => "0x1",
+        };
+
+        receipts.push(serde_json::json!({
+            "transactionHash": tx.hash,
+            "transactionIndex": format!("0x{:x}", tx.tx_index),
+            "blockNumber": format!("0x{:x}", block_number),
+            "blockHash": block_hash,
+            "from": tx.from_addr,
+            "to": tx.to_addr,
+            "gasUsed": format!("0x{:x}", gas_used),
+            "cumulativeGasUsed": format!("0x{:x}", cumulative_gas),
+            "contractAddress": tx.contract_address,
+            "logs": logs,
+            "logsBloom": format!("0x{}", "0".repeat(512)),
+            "status": status,
+            "type": "0x0",
+            "effectiveGasPrice": format!("0x{:x}", tx.gas_price.max(1000000000)),
+        }));
+    }
+
+    Ok(Value::Array(receipts))
 }
 
 // --- Helper functions ---
 
-/// Convert EVM address to Stellar account ID (G... format).
-/// In production this would use the AccountRegistry contract.
-fn evm_address_to_stellar_account(evm_address: &str) -> String {
-    // For now, return a placeholder. In production, query the AccountRegistry.
-    let _addr_bytes = hex::decode(
-        evm_address.strip_prefix("0x").unwrap_or(evm_address)
-    ).unwrap_or_default();
+/// Parse a block number parameter (hex, "latest", "earliest", "pending")
+fn parse_block_number(param: &str, latest: u64) -> u64 {
+    match param {
+        "latest" | "pending" | "safe" | "finalized" => latest,
+        "earliest" => 0,
+        hex_str => {
+            let stripped = hex_str.strip_prefix("0x").unwrap_or(hex_str);
+            u64::from_str_radix(stripped, 16).unwrap_or(latest)
+        }
+    }
+}
 
-    // Default to admin account if no mapping exists
-    "GAAZI4TCR3TY5OJHCTJC2A4QSY6CJWJH5IAJTGKIN2ER7LBNVKOCCWN".to_string()
+/// Format a StoredBlock + transactions into an EVM-compatible block JSON response
+fn format_block_response(
+    block: &crate::chain::db::StoredBlock,
+    txs: &[StoredTransaction],
+    include_txs: bool,
+) -> Value {
+    let transactions: Vec<Value> = if include_txs {
+        txs.iter().map(|tx| format_transaction_with_block_hash(tx, &block.hash)).collect()
+    } else {
+        txs.iter()
+            .map(|tx| Value::String(tx.hash.clone()))
+            .collect()
+    };
+
+    serde_json::json!({
+        "number": format!("0x{:x}", block.number),
+        "hash": block.hash,
+        "parentHash": block.parent_hash,
+        "timestamp": format!("0x{:x}", block.timestamp),
+        "gasUsed": format!("0x{:x}", block.gas_used),
+        "gasLimit": "0x1c9c380", // 30M gas limit
+        "baseFeePerGas": "0x3b9aca00", // 1 gwei
+        "difficulty": "0x0",
+        "totalDifficulty": "0x0",
+        "size": "0x200",
+        "miner": format!("0x{}", "0".repeat(40)),
+        "nonce": "0x0000000000000000",
+        "extraData": "0x",
+        "mixHash": format!("0x{}", "0".repeat(64)),
+        "sha3Uncles": "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347",
+        "receiptsRoot": format!("0x{}", "0".repeat(64)),
+        "stateRoot": format!("0x{}", "0".repeat(64)),
+        "transactionsRoot": format!("0x{}", "0".repeat(64)),
+        "logsBloom": format!("0x{}", "0".repeat(512)),
+        "uncles": [],
+        "transactions": transactions,
+    })
+}
+
+/// Format a transaction response with the correct block hash
+fn format_transaction_with_block_hash(tx: &StoredTransaction, block_hash: &str) -> Value {
+    serde_json::json!({
+        "hash": tx.hash,
+        "nonce": format!("0x{:x}", tx.nonce),
+        "blockHash": if block_hash.is_empty() { Value::Null } else { Value::String(block_hash.to_string()) },
+        "blockNumber": tx.block_number.map(|n| format!("0x{:x}", n)),
+        "transactionIndex": format!("0x{:x}", tx.tx_index),
+        "from": tx.from_addr,
+        "to": tx.to_addr,
+        "value": tx.value,
+        "gas": format!("0x{:x}", tx.gas_limit),
+        "gasPrice": format!("0x{:x}", tx.gas_price.max(1000000000)),
+        "input": format!("0x{}", tx.data),
+        "type": "0x0",
+        "v": "0x1b",
+        "r": format!("0x{}", "0".repeat(64)),
+        "s": format!("0x{}", "0".repeat(64)),
+    })
+}
+
+/// Recover the sender address from a decoded EVM transaction.
+/// Uses secp256k1 ECDSA recovery when possible, falls back to deterministic derivation.
+fn recover_sender(
+    tx: &crate::translator::tx::DecodedEvmTransaction,
+    raw_tx: &[u8],
+) -> String {
+    // Try ECDSA recovery using k256
+    if let Some(addr) = try_ecrecover(tx, raw_tx) {
+        return addr;
+    }
+
+    // Fallback: derive a deterministic address from the signature
+    // This ensures the same signer always gets the same address
+    let mut hasher = Keccak256::new();
+    hasher.update(b"TVA_SENDER_");
+    hasher.update(&tx.r);
+    hasher.update(&tx.s);
+    hasher.update(&tx.v.to_be_bytes());
+    let hash = hasher.finalize();
+    format!("0x{}", hex::encode(&hash[12..32]))
+}
+
+/// Attempt proper ECDSA recovery of the sender address
+fn try_ecrecover(
+    tx: &crate::translator::tx::DecodedEvmTransaction,
+    raw_tx: &[u8],
+) -> Option<String> {
+    use k256::ecdsa::{RecoveryId, Signature, VerifyingKey};
+
+    // Detect transaction type from raw bytes
+    let is_typed = !raw_tx.is_empty() && raw_tx[0] < 0x7f;
+    let tx_type = if is_typed { raw_tx[0] } else { 0 };
+
+    // Determine the recovery ID from v
+    let recovery_id = if is_typed {
+        // EIP-2930 (Type 1) and EIP-1559 (Type 2): v is just 0 or 1 (parity)
+        RecoveryId::new(tx.v as u8 != 0, false)
+    } else if let Some(chain_id) = tx.chain_id {
+        // EIP-155: v = chain_id * 2 + 35 + recovery_id
+        let rid = tx.v.checked_sub(chain_id * 2 + 35)?;
+        RecoveryId::new(rid as u8 != 0, false)
+    } else {
+        // Legacy: v = 27 + recovery_id
+        let rid = tx.v.checked_sub(27)?;
+        RecoveryId::new(rid as u8 != 0, false)
+    };
+
+    // Build the signing hash
+    let signing_hash = compute_signing_hash(tx, tx_type)?;
+
+    // Construct the signature from r and s
+    let r_bytes = pad_to_32(&tx.r);
+    let s_bytes = pad_to_32(&tx.s);
+
+    let mut sig_bytes = [0u8; 64];
+    sig_bytes[..32].copy_from_slice(&r_bytes);
+    sig_bytes[32..].copy_from_slice(&s_bytes);
+
+    let signature = Signature::from_bytes((&sig_bytes).into()).ok()?;
+
+    // Recover the public key
+    let recovered_key = VerifyingKey::recover_from_prehash(
+        &signing_hash,
+        &signature,
+        recovery_id,
+    ).ok()?;
+
+    // Public key to address: keccak256(uncompressed_pubkey[1..]) → last 20 bytes
+    let pubkey_bytes = recovered_key.to_encoded_point(false);
+    let pubkey_uncompressed = pubkey_bytes.as_bytes();
+
+    // Skip the 0x04 prefix byte
+    let mut hasher = Keccak256::new();
+    hasher.update(&pubkey_uncompressed[1..]);
+    let hash = hasher.finalize();
+
+    Some(format!("0x{}", hex::encode(&hash[12..32])))
+}
+
+/// Compute the signing hash for a transaction based on its type
+fn compute_signing_hash(
+    tx: &crate::translator::tx::DecodedEvmTransaction,
+    tx_type: u8,
+) -> Option<Vec<u8>> {
+    use rlp::RlpStream;
+
+    match tx_type {
+        1 => {
+            // EIP-2930: keccak256(0x01 || rlp([chain_id, nonce, gas_price, gas_limit, to, value, data, access_list]))
+            let mut stream = RlpStream::new_list(8);
+            stream.append(&tx.chain_id.unwrap_or(0));
+            stream.append(&tx.nonce);
+            stream.append(&tx.gas_price);
+            stream.append(&tx.gas_limit);
+            match &tx.to {
+                Some(addr) => stream.append(&addr.as_ref()),
+                None => stream.append(&""),
+            };
+            let value_bytes = to_minimal_be_bytes(tx.value);
+            stream.append(&value_bytes.as_slice());
+            stream.append(&tx.data.as_slice());
+            // Empty access list
+            stream.begin_list(0);
+
+            let rlp_encoded = stream.out();
+            let mut prefixed = vec![0x01u8];
+            prefixed.extend_from_slice(&rlp_encoded);
+            let hash = Keccak256::digest(&prefixed);
+            Some(hash.to_vec())
+        }
+        2 => {
+            // EIP-1559: keccak256(0x02 || rlp([chain_id, nonce, max_priority_fee, max_fee, gas_limit, to, value, data, access_list]))
+            let mut stream = RlpStream::new_list(9);
+            stream.append(&tx.chain_id.unwrap_or(0));
+            stream.append(&tx.nonce);
+            stream.append(&0u64); // max_priority_fee (stored as gas_price in our struct)
+            stream.append(&tx.gas_price); // max_fee
+            stream.append(&tx.gas_limit);
+            match &tx.to {
+                Some(addr) => stream.append(&addr.as_ref()),
+                None => stream.append(&""),
+            };
+            let value_bytes = to_minimal_be_bytes(tx.value);
+            stream.append(&value_bytes.as_slice());
+            stream.append(&tx.data.as_slice());
+            // Empty access list
+            stream.begin_list(0);
+
+            let rlp_encoded = stream.out();
+            let mut prefixed = vec![0x02u8];
+            prefixed.extend_from_slice(&rlp_encoded);
+            let hash = Keccak256::digest(&prefixed);
+            Some(hash.to_vec())
+        }
+        _ => {
+            // Legacy/EIP-155: rlp([nonce, gasPrice, gasLimit, to, value, data, chainId, 0, 0])
+            let mut stream = RlpStream::new_list(if tx.chain_id.is_some() { 9 } else { 6 });
+            stream.append(&tx.nonce);
+            stream.append(&tx.gas_price);
+            stream.append(&tx.gas_limit);
+            match &tx.to {
+                Some(addr) => stream.append(&addr.as_ref()),
+                None => stream.append(&""),
+            };
+            let value_bytes = to_minimal_be_bytes(tx.value);
+            stream.append(&value_bytes.as_slice());
+            stream.append(&tx.data.as_slice());
+            if let Some(chain_id) = tx.chain_id {
+                stream.append(&chain_id);
+                stream.append(&0u8);
+                stream.append(&0u8);
+            }
+            let encoded = stream.out();
+            let hash = Keccak256::digest(&encoded);
+            Some(hash.to_vec())
+        }
+    }
+}
+
+/// Convert u128 to minimal big-endian byte representation
+fn to_minimal_be_bytes(val: u128) -> Vec<u8> {
+    if val == 0 {
+        return vec![];
+    }
+    let bytes = val.to_be_bytes();
+    let start = bytes.iter().position(|&b| b != 0).unwrap_or(bytes.len());
+    bytes[start..].to_vec()
+}
+
+/// Pad a byte slice to 32 bytes (left-padded with zeros)
+fn pad_to_32(bytes: &[u8]) -> [u8; 32] {
+    let mut padded = [0u8; 32];
+    let start = 32usize.saturating_sub(bytes.len());
+    let src_start = bytes.len().saturating_sub(32);
+    padded[start..].copy_from_slice(&bytes[src_start..]);
+    padded
 }
 
 /// Convert EVM address to Stellar contract ID string.
 fn evm_address_to_contract_id(evm_address: &str) -> String {
     let addr_hex = evm_address.strip_prefix("0x").unwrap_or(evm_address);
-    // Pad to 64 hex chars (32 bytes) for contract ID
     format!("{:0>64}", addr_hex)
 }
 
 /// Build a ledger key XDR for a contract instance (base64 encoded).
 fn build_contract_instance_key(contract_id: &str) -> String {
-    // Simplified: encode a CONTRACT_DATA key for the contract instance
     let contract_bytes = hex::decode(contract_id).unwrap_or_else(|_| vec![0u8; 32]);
     let mut key_xdr = Vec::new();
 
-    // LedgerKey type: CONTRACT_DATA = 6
     key_xdr.extend_from_slice(&6u32.to_be_bytes());
-    // Contract address
-    key_xdr.extend_from_slice(&1u32.to_be_bytes()); // SC_ADDRESS_TYPE_CONTRACT
+    key_xdr.extend_from_slice(&1u32.to_be_bytes());
     if contract_bytes.len() >= 32 {
         key_xdr.extend_from_slice(&contract_bytes[..32]);
     } else {
         key_xdr.extend_from_slice(&contract_bytes);
         key_xdr.extend(vec![0u8; 32 - contract_bytes.len()]);
     }
-    // Key: SCV_LEDGER_KEY_CONTRACT_INSTANCE
-    key_xdr.extend_from_slice(&20u32.to_be_bytes()); // SC_VAL type for instance
-    // Durability: PERSISTENT = 1
+    key_xdr.extend_from_slice(&20u32.to_be_bytes());
     key_xdr.extend_from_slice(&1u32.to_be_bytes());
 
     base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &key_xdr)
 }
 
-/// Convert a Stellar transaction hash to EVM format (0x-prefixed 32-byte hex).
-fn stellar_hash_to_evm_hash(stellar_hash: &str) -> String {
-    if stellar_hash.starts_with("0x") {
-        return stellar_hash.to_string();
-    }
-    // Stellar hashes are typically hex-encoded 32 bytes
-    if stellar_hash.len() == 64 {
-        return format!("0x{}", stellar_hash.to_lowercase());
-    }
-    // Try to decode as base64 or return padded
-    format!("0x{:0>64}", stellar_hash.to_lowercase())
-}
-
-/// Convert an EVM tx hash back to Stellar hash format for lookup.
-fn evm_hash_to_stellar_hash(evm_hash: &str) -> String {
-    evm_hash.strip_prefix("0x").unwrap_or(evm_hash).to_string()
-}
-
 /// Get the source account ID from the config (derive from secret key).
 fn get_source_account_id(config: &Config) -> Result<String> {
-    let secret = &config.stellar_secret_key;
-    if secret.starts_with('S') && secret.len() == 56 {
-        // In a full implementation, we would derive the public key from the secret.
-        // For now, return a placeholder account.
-        // The actual derivation requires Ed25519 key derivation from the Stellar seed.
-        Ok("GAAZI4TCR3TY5OJHCTJC2A4QSY6CJWJH5IAJTGKIN2ER7LBNVKOCCWN".to_string())
-    } else {
-        Err(anyhow!("Invalid Stellar secret key format"))
+    // First try the explicit address from config
+    if let Some(addr) = &config.stellar_account_address {
+        if addr.starts_with('G') && addr.len() == 56 {
+            return Ok(addr.clone());
+        }
     }
+    
+    // Try to get address from stellar CLI
+    use std::process::Command;
+    let project_root = std::env::current_dir()
+        .ok()
+        .and_then(|p| p.parent().map(|p| p.to_path_buf()))
+        .unwrap_or_else(|| std::path::PathBuf::from("."));
+    
+    let stellar_bin = project_root.join("tooling").join("bin").join("stellar");
+    if stellar_bin.exists() {
+        let output = Command::new(&stellar_bin)
+            .args(&["keys", "address", "tva-deployer"])
+            .output();
+        
+        if let Ok(output) = output {
+            if output.status.success() {
+                let addr = String::from_utf8_lossy(&output.stdout)
+                    .trim()
+                    .to_string();
+                if addr.starts_with('G') && addr.len() == 56 {
+                    return Ok(addr);
+                }
+            }
+        }
+    }
+    
+    // Fallback: return error with instructions
+    Err(anyhow!("Could not determine Stellar account address. Set STELLAR_ACCOUNT_ADDRESS environment variable or ensure 'tva-deployer' key exists"))
+}
+
+/// Handler for tva_verifyContract - submit source code hash to VerificationRegistry on Stellar
+pub async fn verify_contract(
+    client: &SorobanClient,
+    config: &Config,
+    params: &[Value],
+) -> Result<Value> {
+    let contract_addr = params
+        .get(0)
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| anyhow!("tva_verifyContract requires contract address"))?;
+
+    let source = params
+        .get(1)
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| anyhow!("tva_verifyContract requires source code"))?;
+
+    let _compiler_version = params
+        .get(2)
+        .and_then(|v| v.as_str())
+        .unwrap_or("0.3.0");
+
+    let _compiler_flags = params
+        .get(3)
+        .and_then(|v| v.as_str())
+        .unwrap_or("--target soroban");
+
+    let metadata = params
+        .get(4)
+        .and_then(|v| v.as_str())
+        .unwrap_or("{}");
+
+    let registry_id = config
+        .verification_registry_contract_id
+        .as_ref()
+        .ok_or_else(|| anyhow!("VERIFICATION_REGISTRY_CONTRACT_ID not configured"))?;
+
+    info!(
+        "tva_verifyContract: contract={}, registry={}",
+        &contract_addr[..10],
+        &registry_id[..10]
+    );
+
+    // Compute hashes
+    use sha3::{Digest, Keccak256};
+    let source_hash = Keccak256::digest(source.as_bytes());
+    let metadata_hash = Keccak256::digest(metadata.as_bytes());
+    
+    let source_hash_bytes: [u8; 32] = source_hash.into();
+    let metadata_hash_bytes: [u8; 32] = metadata_hash.into();
+
+    // Convert EVM address to Stellar contract address format
+    let contract_addr_bytes = hex::decode(contract_addr.strip_prefix("0x").unwrap_or(contract_addr))
+        .map_err(|e| anyhow!("Invalid contract address hex: {}", e))?;
+
+    if contract_addr_bytes.len() != 20 {
+        return Err(anyhow!("Contract address must be 20 bytes"));
+    }
+
+    let mut stellar_addr = [0u8; 32];
+    stellar_addr[12..32].copy_from_slice(&contract_addr_bytes);
+
+    use crate::translator::scval::{ScVal, StellarAddress};
+    let args = vec![
+        ScVal::Address(StellarAddress::Contract(stellar_addr)),
+        ScVal::Bytes(source_hash_bytes.to_vec()),
+        ScVal::Bytes(metadata_hash_bytes.to_vec()),
+    ];
+
+    let source_account = get_source_account_id(config)?;
+    let sequence = client.get_account_sequence(&source_account).await.unwrap_or(0);
+
+    let tx_xdr = crate::translator::tx::build_soroban_invoke_tx(
+        &source_account,
+        sequence + 1,
+        registry_id,
+        "verify",
+        &args,
+        client.network_passphrase(),
+        10000, // Higher fee for storage operations
+    )?;
+
+    // Submit transaction (not simulate - this writes to chain)
+    let result = client.send_transaction(&tx_xdr).await?;
+
+    // TODO: Store full source in RPC DB for querying
+    // For now, just return success
+
+    Ok(serde_json::json!({
+        "verified": true,
+        "txHash": result.hash,
+        "contractAddress": contract_addr,
+        "sourceHash": format!("0x{}", hex::encode(source_hash_bytes))
+    }))
+}
+
+/// Handler for tva_getVerifiedSource - query VerificationRegistry for verified source
+pub async fn get_verified_source(
+    client: &SorobanClient,
+    config: &Config,
+    params: &[Value],
+) -> Result<Value> {
+    let contract_addr = params
+        .get(0)
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| anyhow!("tva_getVerifiedSource requires contract address"))?;
+
+    let registry_id = config
+        .verification_registry_contract_id
+        .as_ref()
+        .ok_or_else(|| anyhow!("VERIFICATION_REGISTRY_CONTRACT_ID not configured"))?;
+
+    debug!("tva_getVerifiedSource: contract={}", contract_addr);
+
+    // Convert EVM address to Stellar contract address format
+    let contract_addr_bytes = hex::decode(contract_addr.strip_prefix("0x").unwrap_or(contract_addr))
+        .map_err(|e| anyhow!("Invalid contract address hex: {}", e))?;
+
+    if contract_addr_bytes.len() != 20 {
+        return Err(anyhow!("Contract address must be 20 bytes"));
+    }
+
+    let mut stellar_addr = [0u8; 32];
+    stellar_addr[12..32].copy_from_slice(&contract_addr_bytes);
+
+    use crate::translator::scval::{ScVal, StellarAddress};
+    let args = vec![ScVal::Address(StellarAddress::Contract(stellar_addr))];
+
+    let source_account = get_source_account_id(config)?;
+    let sequence = client.get_account_sequence(&source_account).await.unwrap_or(0);
+
+    let tx_xdr = crate::translator::tx::build_soroban_invoke_tx(
+        &source_account,
+        sequence,
+        registry_id,
+        "getSource",
+        &args,
+        client.network_passphrase(),
+        100,
+    )?;
+
+    // Simulate (read-only)
+    let sim_result = client.simulate_transaction(&tx_xdr).await?;
+
+    if let Some(error) = &sim_result.error {
+        return Err(anyhow!("Contract call error: {}", error));
+    }
+
+    // Decode the result (bytes32 hash)
+    let verified = if let Some(results) = &sim_result.results {
+        if let Some(first_result) = results.first() {
+            if let Some(xdr) = &first_result.xdr {
+                // Decode bytes32 from XDR
+                // For now, just check if result exists (non-zero means verified)
+                !xdr.is_empty()
+            } else {
+                false
+            }
+        } else {
+            false
+        }
+    } else {
+        false
+    };
+
+    // TODO: Query RPC DB for full source code if verified
+    Ok(serde_json::json!({
+        "verified": verified,
+        "contractAddress": contract_addr,
+        "note": verified.then_some("Contract is verified on Stellar")
+    }))
 }

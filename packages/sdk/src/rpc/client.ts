@@ -433,6 +433,61 @@ export class RpcClient {
       return false;
     }
   }
+
+  // ============================================================================
+  // TVA Account Registry Methods
+  // ============================================================================
+
+  /**
+   * Gets a TVA account by EVM address.
+   * Returns the bidirectional EVM↔Stellar mapping and registration status.
+   */
+  async getAccount(evmAddress: EvmAddress): Promise<TvaAccount | null> {
+    return this.request<TvaAccount | null>('tva_getAccount', [evmAddress]);
+  }
+
+  /**
+   * Gets a TVA account by Stellar address (reverse lookup).
+   */
+  async getAccountByStellar(stellarAddress: string): Promise<TvaAccount | null> {
+    return this.request<TvaAccount | null>('tva_getAccountByStellar', [stellarAddress]);
+  }
+
+  /**
+   * Registers an EVM address on the TVA chain.
+   * Creates a mirrored Stellar wallet with deterministic key derivation.
+   */
+  async registerAccount(evmAddress: EvmAddress): Promise<TvaRegistrationResult> {
+    return this.request<TvaRegistrationResult>('tva_registerAccount', [evmAddress]);
+  }
+
+  /**
+   * Returns the total number of registered accounts on the TVA chain.
+   */
+  async getRegistrationCount(): Promise<{ count: number; countHex: string }> {
+    return this.request<{ count: number; countHex: string }>('tva_getRegistrationCount');
+  }
+}
+
+/**
+ * TVA Account record from the chain
+ */
+export interface TvaAccount {
+  evmAddress: string;
+  stellarAddress: string;
+  nonce: string;
+  funded: boolean;
+  registered: boolean;
+  createdAt: number;
+}
+
+/**
+ * Result of registering an account
+ */
+export interface TvaRegistrationResult {
+  evmAddress: string;
+  stellarAddress: string;
+  registered: boolean;
 }
 
 /**

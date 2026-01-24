@@ -150,6 +150,9 @@ export class TVAWalletAdapter extends EventEmitter<TVAWalletAdapterEvents> {
       // Derive Stellar keypair
       await this.deriveAndStoreStellarKey();
 
+      // Register on TVA chain (creates EVM↔Stellar mapping)
+      await this.registerOnChain();
+
       return this.getState();
     } catch (error) {
       this.emit('error', error as Error);
@@ -193,6 +196,37 @@ export class TVAWalletAdapter extends EventEmitter<TVAWalletAdapterEvents> {
     this.emit('stellarKeyDerived', this.stellarKeypair.publicKey() as StellarAddress);
 
     return this.stellarKeypair;
+  }
+
+  /**
+   * Registers the EVM address on the TVA chain.
+   * Creates a native account mapping (replaces Soroban AccountRegistry contract).
+   */
+  async registerOnChain(): Promise<void> {
+    if (!this.evmAddress) {
+      throw new Error('Wallet not connected');
+    }
+
+    try {
+      const response = await fetch(this.networkConfig.rpcUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'tva_registerAccount',
+          params: [this.evmAddress],
+        }),
+      });
+
+      const json = await response.json();
+      if (json.result && json.result.registered) {
+        this.isRegistered = true;
+      }
+    } catch (error) {
+      // Registration failure is non-fatal - account will be auto-registered on first tx
+      console.warn('TVA on-chain registration failed (will auto-register on first tx):', error);
+    }
   }
 
   /**

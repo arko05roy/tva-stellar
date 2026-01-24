@@ -29,6 +29,7 @@
 //! - `stellar` - Soroban/Horizon RPC client wrapper
 //! - `emulator` - Block/log emulation (Stellar ledger -> EVM format)
 
+pub mod chain;
 pub mod config;
 pub mod emulator;
 pub mod methods;

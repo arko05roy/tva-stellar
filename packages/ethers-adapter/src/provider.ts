@@ -180,6 +180,54 @@ export class TVAProvider extends JsonRpcProvider {
       gasPrice: gasPrice.gasPrice || BigInt(0),
     };
   }
+
+  // ============================================================================
+  // TVA Account Registry Methods
+  // ============================================================================
+
+  /**
+   * Gets a TVA account by EVM address (native chain lookup)
+   */
+  async getTVAAccount(evmAddress: string): Promise<TVAAccountInfo | null> {
+    return this.send('tva_getAccount', [evmAddress]);
+  }
+
+  /**
+   * Gets a TVA account by Stellar address (reverse lookup)
+   */
+  async getTVAAccountByStellar(stellarAddress: string): Promise<TVAAccountInfo | null> {
+    return this.send('tva_getAccountByStellar', [stellarAddress]);
+  }
+
+  /**
+   * Registers an EVM address on the TVA chain
+   */
+  async registerTVAAccount(evmAddress: string): Promise<{
+    evmAddress: string;
+    stellarAddress: string;
+    registered: boolean;
+  }> {
+    return this.send('tva_registerAccount', [evmAddress]);
+  }
+
+  /**
+   * Gets the total number of registered accounts on TVA
+   */
+  async getTVARegistrationCount(): Promise<{ count: number; countHex: string }> {
+    return this.send('tva_getRegistrationCount', []);
+  }
+}
+
+/**
+ * TVA Account info returned from chain
+ */
+export interface TVAAccountInfo {
+  evmAddress: string;
+  stellarAddress: string;
+  nonce: string;
+  funded: boolean;
+  registered: boolean;
+  createdAt: number;
 }
 
 /**

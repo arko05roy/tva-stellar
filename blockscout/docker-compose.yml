@@ -1,0 +1,137 @@
+version: '3.9'
+
+services:
+  db:
+    image: postgres:15
+    restart: always
+    container_name: blockscout-db
+    environment:
+      POSTGRES_PASSWORD: blockscout
+      POSTGRES_USER: blockscout
+      POSTGRES_DB: blockscout
+    expose:
+      - "5432"
+    volumes:
+      - blockscout-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U blockscout"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    restart: always
+    container_name: blockscout-redis
+    expose:
+      - "6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    image: blockscout/blockscout:latest
+    restart: always
+    container_name: blockscout-backend
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      # Database
+      DATABASE_URL: postgresql://blockscout:blockscout@db:5432/blockscout
+
+      # JSON-RPC endpoint (TVA RPC on host machine)
+      ETHEREUM_JSONRPC_VARIANT: geth
+      ETHEREUM_JSONRPC_HTTP_URL: http://host.docker.internal:8545
+      ETHEREUM_JSONRPC_WS_URL: ws://host.docker.internal:8545
+
+      # Chain configuration
+      CHAIN_ID: "1414676736"
+      NETWORK: TVA Protocol
+      SUBNETWORK: TVA Testnet
+      COIN: XLM
+      COIN_NAME: Stellar Lumens
+
+      # Block indexing
+      INDEXER_DISABLE_PENDING_TRANSACTIONS_FETCHER: "true"
+      INDEXER_DISABLE_INTERNAL_TRANSACTIONS_FETCHER: "true"
+      BLOCK_TRANSFORMER: base
+
+      # API configuration
+      API_V2_ENABLED: "true"
+      API_V1_READ_METHODS_DISABLED: "false"
+      API_V1_WRITE_METHODS_DISABLED: "false"
+
+      # Frontend
+      BLOCKSCOUT_HOST: localhost
+      BLOCKSCOUT_PROTOCOL: http
+
+      # Misc
+      ECTO_USE_SSL: "false"
+      SECRET_KEY_BASE: "56NtB48ear7+wMSf0IQuWDAAazhpb31qyc7GiyspBP2vh7t5zlCsF5QDv76chXeN"
+      PORT: "4000"
+      POOL_SIZE: "80"
+      POOL_SIZE_API: "10"
+      HEART_BEAT_TIMEOUT: "30"
+      DISABLE_EXCHANGE_RATES: "true"
+      SHOW_TXS_CHART: "true"
+
+      # Disable features not applicable to TVA
+      DISABLE_BRIDGE_MARKET_CAP_UPDATER: "true"
+      TOKEN_METADATA_UPDATE_INTERVAL: "1800"
+      FIRST_BLOCK: "0"
+      TRACE_FIRST_BLOCK: "0"
+
+      # Redis
+      ACCOUNT_REDIS_URL: redis://redis:6379/1
+    ports:
+      - "4000:4000"
+    command: sh -c "bin/blockscout eval \"Elixir.Explorer.ReleaseTasks.create_and_migrate()\" && bin/blockscout start"
+
+  frontend:
+    image: ghcr.io/blockscout/frontend:latest
+    restart: always
+    container_name: blockscout-frontend
+    depends_on:
+      - backend
+    environment:
+      NEXT_PUBLIC_APP_HOST: localhost
+      NEXT_PUBLIC_APP_PORT: "3001"
+      NEXT_PUBLIC_APP_PROTOCOL: http
+      NEXT_PUBLIC_API_HOST: localhost
+      NEXT_PUBLIC_API_PORT: "4000"
+      NEXT_PUBLIC_API_PROTOCOL: http
+      NEXT_PUBLIC_NETWORK_NAME: "TVA Protocol"
+      NEXT_PUBLIC_NETWORK_SHORT_NAME: "TVA"
+      NEXT_PUBLIC_NETWORK_ID: "1414676736"
+      NEXT_PUBLIC_NETWORK_CURRENCY_NAME: "Stellar Lumens"
+      NEXT_PUBLIC_NETWORK_CURRENCY_SYMBOL: "XLM"
+      NEXT_PUBLIC_NETWORK_CURRENCY_DECIMALS: "7"
+      NEXT_PUBLIC_NETWORK_RPC_URL: http://localhost:8545
+      NEXT_PUBLIC_IS_TESTNET: "true"
+      NEXT_PUBLIC_API_BASE_PATH: /
+      NEXT_PUBLIC_HOMEPAGE_CHARTS: "['daily_txs']"
+      NEXT_PUBLIC_VISUALIZE_API_HOST: ""
+      NEXT_PUBLIC_API_WEBSOCKET_PROTOCOL: ws
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "3001:3000"
+
+  smart-contract-verifier:
+    image: ghcr.io/blockscout/smart-contract-verifier:latest
+    restart: always
+    container_name: blockscout-verifier
+    ports:
+      - "8150:8050"
+    environment:
+      SMART_CONTRACT_VERIFIER__SERVER__HTTP__ADDR: 0.0.0.0:8050
+
+volumes:
+  blockscout-db-data:

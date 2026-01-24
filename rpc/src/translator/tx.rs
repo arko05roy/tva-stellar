@@ -80,8 +80,14 @@ pub fn decode_raw_transaction(raw_tx: &[u8]) -> Result<DecodedEvmTransaction> {
 
     let item_count = rlp.item_count().map_err(|e| anyhow!("RLP parse error: {}", e))?;
 
-    if is_typed && item_count >= 9 {
+    if is_typed && item_count == 12 {
         // EIP-1559 (Type 2): [chain_id, nonce, max_priority_fee, max_fee, gas_limit, to, value, data, access_list, v, r, s]
+        decode_eip1559_transaction(&rlp, raw_tx)
+    } else if is_typed && item_count == 11 {
+        // EIP-2930 (Type 1): [chain_id, nonce, gas_price, gas_limit, to, value, data, access_list, v, r, s]
+        decode_eip2930_transaction(&rlp, raw_tx)
+    } else if is_typed && item_count >= 9 {
+        // Fallback for typed transactions - try EIP-1559 layout
         decode_eip1559_transaction(&rlp, raw_tx)
     } else if item_count == 9 {
         // Legacy EIP-155 transaction: [nonce, gasPrice, gasLimit, to, value, data, v, r, s]
@@ -139,6 +145,51 @@ fn decode_legacy_transaction(rlp: &Rlp, raw_tx: &[u8]) -> Result<DecodedEvmTrans
         value,
         data,
         chain_id,
+        v,
+        r,
+        s,
+        tx_hash: hash,
+    })
+}
+
+fn decode_eip2930_transaction(rlp: &Rlp, raw_tx: &[u8]) -> Result<DecodedEvmTransaction> {
+    // EIP-2930 (Type 1): [chain_id, nonce, gas_price, gas_limit, to, value, data, access_list, v, r, s]
+    let chain_id: u64 = rlp.val_at(0).unwrap_or(0);
+    let nonce: u64 = rlp.val_at(1).unwrap_or(0);
+    let gas_price: u64 = rlp.val_at(2).unwrap_or(0);
+    let gas_limit: u64 = rlp.val_at(3).unwrap_or(0);
+
+    let to_bytes: Vec<u8> = rlp.val_at(4).unwrap_or_default();
+    let to = if to_bytes.len() == 20 {
+        let mut addr = [0u8; 20];
+        addr.copy_from_slice(&to_bytes);
+        Some(addr)
+    } else {
+        None
+    };
+
+    let value_bytes: Vec<u8> = rlp.val_at(5).unwrap_or_default();
+    let value = bytes_to_u128(&value_bytes);
+
+    let data: Vec<u8> = rlp.val_at(6).unwrap_or_default();
+    // access_list at index 7 is ignored
+
+    let v: u64 = rlp.val_at(8).unwrap_or(0);
+    let r: Vec<u8> = rlp.val_at(9).unwrap_or_default();
+    let s: Vec<u8> = rlp.val_at(10).unwrap_or_default();
+
+    let tx_hash = Keccak256::digest(raw_tx);
+    let mut hash = [0u8; 32];
+    hash.copy_from_slice(&tx_hash);
+
+    Ok(DecodedEvmTransaction {
+        nonce,
+        gas_price,
+        gas_limit,
+        to,
+        value,
+        data,
+        chain_id: Some(chain_id),
         v,
         r,
         s,

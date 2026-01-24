@@ -16,6 +16,18 @@ pub struct Config {
     pub tva_rpc_port: u16,
     /// Log level
     pub log_level: String,
+    /// Directory for TVA chain data (SQLite DB)
+    pub tva_data_dir: String,
+    /// Block production interval in milliseconds
+    pub tva_block_interval_ms: u64,
+    /// Stellar Friendbot URL for auto-funding mirror accounts
+    pub stellar_friendbot_url: String,
+    /// Master seed for deterministic wallet derivation
+    pub tva_master_seed: Option<String>,
+    /// Verification Registry contract ID on Stellar (optional)
+    pub verification_registry_contract_id: Option<String>,
+    /// Stellar account address (derived from secret key, for convenience)
+    pub stellar_account_address: Option<String>,
 }
 
 impl Config {
@@ -43,6 +55,22 @@ impl Config {
 
         let log_level = env::var("RUST_LOG").unwrap_or_else(|_| "info".to_string());
 
+        let tva_data_dir = env::var("TVA_DATA_DIR")
+            .unwrap_or_else(|_| "./tva_data".to_string());
+
+        let tva_block_interval_ms: u64 = env::var("TVA_BLOCK_INTERVAL_MS")
+            .unwrap_or_else(|_| "5000".to_string())
+            .parse()
+            .context("TVA_BLOCK_INTERVAL_MS must be a valid u64")?;
+
+        let stellar_friendbot_url = env::var("STELLAR_FRIENDBOT_URL")
+            .unwrap_or_else(|_| "https://friendbot.stellar.org".to_string());
+
+        let tva_master_seed = env::var("TVA_MASTER_SEED").ok();
+
+        let verification_registry_contract_id = env::var("VERIFICATION_REGISTRY_CONTRACT_ID").ok();
+        let stellar_account_address = env::var("STELLAR_ACCOUNT_ADDRESS").ok();
+
         Ok(Config {
             stellar_rpc_url,
             stellar_network_passphrase,
@@ -50,6 +78,12 @@ impl Config {
             tva_chain_id,
             tva_rpc_port,
             log_level,
+            tva_data_dir,
+            tva_block_interval_ms,
+            stellar_friendbot_url,
+            tva_master_seed,
+            verification_registry_contract_id,
+            stellar_account_address,
         })
     }
 

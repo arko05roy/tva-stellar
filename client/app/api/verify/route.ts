@@ -19,6 +19,7 @@ interface VerifyResponse {
   onChainHash?: string;
   hashMatch: boolean;
   onChainMatch?: boolean;
+  onChainVerified?: boolean;
   size: number;
   errors?: string[];
 }
@@ -194,6 +195,51 @@ export async function POST(request: NextRequest) {
       (contractId ? onChainMatch === true : true) &&
       errors.length === 0;
 
+    // If hash matches and contract ID is provided, submit to Stellar VerificationRegistry
+    let onChainVerified = false;
+    if (verified && contractId && onChainMatch) {
+      try {
+        const rpcUrl = process.env.TVA_RPC_URL || 'http://localhost:8545';
+        const verifyResponse = await fetch(rpcUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            jsonrpc: '2.0',
+            method: 'tva_verifyContract',
+            params: [
+              contractId,
+              source,
+              '0.3.0', // Compiler version
+              '--target soroban',
+              JSON.stringify({
+                abi: '{}', // TODO: Include ABI if available
+                wasmHash: computedHash,
+                size: wasmSize,
+              }),
+            ],
+            id: 1,
+          }),
+        });
+
+        if (verifyResponse.ok) {
+          const verifyResult = await verifyResponse.json();
+          if (verifyResult.result && verifyResult.result.verified) {
+            onChainVerified = true;
+          } else if (verifyResult.error) {
+            errors.push(`Stellar verification failed: ${verifyResult.error.message || JSON.stringify(verifyResult.error)}`);
+          }
+        } else {
+          const errorText = await verifyResponse.text();
+          errors.push(`Stellar verification request failed: ${errorText}`);
+        }
+      } catch (verifyError: unknown) {
+        const errorMessage =
+          verifyError instanceof Error ? verifyError.message : String(verifyError);
+        errors.push(`Failed to submit to Stellar: ${errorMessage}`);
+        // Don't fail overall verification if Stellar submission fails
+      }
+    }
+
     const response: VerifyResponse = {
       verified,
       hash: computedHash,
@@ -201,6 +247,7 @@ export async function POST(request: NextRequest) {
       onChainHash,
       hashMatch,
       onChainMatch,
+      onChainVerified,
       size: wasmSize,
       errors: errors.length > 0 ? errors : undefined,
     };

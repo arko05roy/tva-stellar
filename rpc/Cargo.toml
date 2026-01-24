@@ -60,3 +60,21 @@ chrono = "0.4"
 tower = "0.4"
 tower-http = { version = "0.5", features = ["cors"] }
 http = "1"
+
+# SQLite database for TVA chain state
+rusqlite = { version = "0.31", features = ["bundled"] }
+
+# Ed25519 key generation for Stellar wallet mirroring
+ed25519-dalek = { version = "2", features = ["rand_core"] }
+
+# Random number generation
+rand = "0.8"
+
+# SHA2 for key derivation
+sha2 = "0.10"
+
+# CRC for Stellar strkey checksum
+crc = "3"
+
+# secp256k1 for EVM transaction sender recovery
+k256 = { version = "0.13", features = ["ecdsa"] }

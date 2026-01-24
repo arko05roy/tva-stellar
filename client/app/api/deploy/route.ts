@@ -106,22 +106,23 @@ export async function POST(request: NextRequest): Promise<NextResponse<DeployRes
       'https://soroban-testnet.stellar.org',
     ];
 
-    // Always add the separator and _caller (Solang always injects this for msg.sender)
-    args.push('--');
-    args.push('--_caller', sourceAccount);
-
     // Append constructor args if provided
-    if (body.constructorArgs && typeof body.constructorArgs === 'object') {
-      for (const [argName, argValue] of Object.entries(body.constructorArgs)) {
-        const cleanName = argName.replace(/^-+/, '');
-        // Skip _caller — already added above
-        if (cleanName === '_caller' || cleanName === 'caller') continue;
+    const hasConstructorArgs = body.constructorArgs && typeof body.constructorArgs === 'object'
+      && Object.keys(body.constructorArgs).length > 0;
 
+    if (hasConstructorArgs) {
+      args.push('--');
+      for (const [argName, argValue] of Object.entries(body.constructorArgs!)) {
+        const cleanName = argName.replace(/^-+/, '');
         const flag = `--${cleanName}`;
         let value = String(argValue);
 
         // Replace EVM-format addresses with the source account identity
         if (value.startsWith('0x') && value.length === 42) {
+          value = sourceAccount;
+        }
+        // _caller is Solang's msg.sender equivalent — use deployer identity
+        if (cleanName === '_caller' || cleanName === 'caller') {
           value = sourceAccount;
         }
 
@@ -143,40 +144,85 @@ export async function POST(request: NextRequest): Promise<NextResponse<DeployRes
       const err = deployError as { message?: string; stderr?: string; stdout?: string };
       const errorOutput = `${err.message || ''}\n${err.stderr || ''}`;
 
-      // Check if the error is about missing constructor arguments
-      const missingArgPattern = /Missing required argument ['`"]?([^'`"]+)['`"]? of type (\w+)/g;
-      const missingArgs: Array<{ name: string; type: string }> = [];
-      let argMatch;
-      while ((argMatch = missingArgPattern.exec(errorOutput)) !== null) {
-        missingArgs.push({ name: argMatch[1], type: argMatch[2] });
+      // Check if the error is about unexpected constructor arguments
+      const unexpectedArgPattern = /unexpected argument '?--([^'"\s]+)'? found/g;
+      const unexpectedArgs: string[] = [];
+      let unexpectedMatch;
+      while ((unexpectedMatch = unexpectedArgPattern.exec(errorOutput)) !== null) {
+        unexpectedArgs.push(unexpectedMatch[1]);
       }
 
-      if (missingArgs.length > 0) {
-        // Retry with default constructor arguments (deduplicated)
-        const retryArgs = [...args];
-        const seen = new Set<string>();
-        // Track args already in the command
-        for (let i = 0; i < retryArgs.length; i++) {
-          if (retryArgs[i].startsWith('--_') || retryArgs[i].startsWith('--')) {
-            seen.add(retryArgs[i]);
-          }
+      // If there are unexpected args, retry without them
+      if (unexpectedArgs.length > 0) {
+        const cleanedArgs: string[] = [];
+        let skipNext = false;
+        for (let i = 0; i < args.length; i++) {
+          if (skipNext) { skipNext = false; continue; }
+          const isUnexpected = unexpectedArgs.some(ua => args[i] === `--${ua}`);
+          if (isUnexpected) { skipNext = true; continue; }
+          cleanedArgs.push(args[i]);
         }
-        for (const arg of missingArgs) {
-          const flag = `--${arg.name}`;
-          if (seen.has(flag)) continue; // already present, skip
-          seen.add(flag);
-          const defaultValue = getDefaultForType(arg.type, body.contractName, arg.name, sourceAccount);
-          retryArgs.push(flag, defaultValue);
+        // Remove trailing '--' if no constructor args remain after it
+        const sepIdx = cleanedArgs.indexOf('--');
+        if (sepIdx >= 0 && sepIdx === cleanedArgs.length - 1) {
+          cleanedArgs.pop();
         }
-
-        const retryResult = await execFileAsync(STELLAR_BIN, retryArgs, {
+        const retryClean = await execFileAsync(STELLAR_BIN, cleanedArgs, {
           cwd: PROJECT_ROOT,
           timeout: 120000,
         });
-        stdout = retryResult.stdout;
-        stderr = retryResult.stderr;
+        stdout = retryClean.stdout;
+        stderr = retryClean.stderr;
       } else {
-        throw deployError;
+        // Check if the error is about missing constructor arguments
+        const missingArgPattern = /(?:Missing required argument|required arguments were not provided).*?['`"]?--([^'`"\s]+)['`"]?/g;
+        const missingArgs: Array<{ name: string; type: string }> = [];
+        let argMatch;
+        while ((argMatch = missingArgPattern.exec(errorOutput)) !== null) {
+          missingArgs.push({ name: argMatch[1], type: 'string' });
+        }
+        // Also try clap's explicit format
+        const missingArgPattern2 = /the following required arguments were not provided:\s*([\s\S]*?)(?:\n\n|$)/;
+        const blockMatch = missingArgPattern2.exec(errorOutput);
+        if (blockMatch) {
+          const argLines = blockMatch[1].split('\n').map(l => l.trim()).filter(l => l.startsWith('--'));
+          for (const line of argLines) {
+            const name = line.replace(/^--/, '').replace(/<.*>/, '').trim();
+            if (name && !missingArgs.find(a => a.name === name)) {
+              missingArgs.push({ name, type: 'string' });
+            }
+          }
+        }
+
+        if (missingArgs.length > 0) {
+          // Retry with default constructor arguments
+          const retryArgs = [...args];
+          if (!retryArgs.includes('--')) {
+            retryArgs.push('--');
+          }
+          const seen = new Set<string>();
+          for (let i = 0; i < retryArgs.length; i++) {
+            if (retryArgs[i].startsWith('--') && retryArgs[i] !== '--') {
+              seen.add(retryArgs[i]);
+            }
+          }
+          for (const arg of missingArgs) {
+            const flag = `--${arg.name}`;
+            if (seen.has(flag)) continue;
+            seen.add(flag);
+            const defaultValue = getDefaultForType(arg.type, body.contractName, arg.name, sourceAccount);
+            retryArgs.push(flag, defaultValue);
+          }
+
+          const retryResult = await execFileAsync(STELLAR_BIN, retryArgs, {
+            cwd: PROJECT_ROOT,
+            timeout: 120000,
+          });
+          stdout = retryResult.stdout;
+          stderr = retryResult.stderr;
+        } else {
+          throw deployError;
+        }
       }
     }
 

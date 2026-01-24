@@ -7,6 +7,8 @@ use tower::ServiceBuilder;
 use tower_http::cors::{AllowOrigin, Any, CorsLayer};
 use tracing::{info, warn};
 
+use crate::chain::{ChainDb, ChainState, Mempool, Sequencer, SettlementEngine, WalletManager};
+use crate::chain::sequencer::create_genesis_block;
 use crate::config::Config;
 use crate::methods::{eth, net, web3};
 use crate::stellar::SorobanClient;
@@ -16,16 +18,18 @@ use crate::translator::AbiRegistry;
 pub struct RpcState {
     pub config: Config,
     pub soroban_client: SorobanClient,
-    pub abi_registry: AbiRegistry,
+    pub abi_registry: Arc<AbiRegistry>,
+    pub chain: ChainState,
 }
 
 /// Start the JSON-RPC server.
 pub async fn start_server(config: Config) -> Result<()> {
     let addr = SocketAddr::from(([0, 0, 0, 0], config.tva_rpc_port));
 
-    info!("Starting TVA RPC Server on {}", addr);
+    info!("Starting TVA Node on {}", addr);
     info!("Chain ID: {} (0x{:x})", config.tva_chain_id, config.tva_chain_id);
     info!("Stellar RPC: {}", config.stellar_rpc_url);
+    info!("Data directory: {}", config.tva_data_dir);
 
     // Initialize Soroban client
     let soroban_client = SorobanClient::new(
@@ -36,33 +40,89 @@ pub async fn start_server(config: Config) -> Result<()> {
     // Check Soroban RPC health
     match soroban_client.get_health().await {
         Ok(health) => {
-            info!("Soroban RPC health: status={}", health.status);
+            info!("Stellar RPC health: status={}", health.status);
             if let Some(latest) = health.latest_ledger {
-                info!("Latest ledger: {}", latest);
+                info!("Stellar latest ledger: {}", latest);
             }
         }
         Err(e) => {
-            warn!("Could not reach Soroban RPC (will retry on requests): {}", e);
+            warn!("Could not reach Stellar RPC (will retry on requests): {}", e);
         }
     }
 
     // Initialize ABI registry
-    let abi_registry = AbiRegistry::new();
+    let abi_registry = Arc::new(AbiRegistry::new());
 
-    // Create shared state
+    // --- Initialize TVA Chain Components ---
+
+    // Create data directory
+    std::fs::create_dir_all(&config.tva_data_dir)?;
+    let db_path = format!("{}/tva_chain.db", config.tva_data_dir);
+
+    // Open chain database
+    let db = Arc::new(ChainDb::open(&db_path)?);
+
+    // Create genesis block if this is a fresh database
+    if db.get_latest_block_number()? == 0 {
+        create_genesis_block(&db)?;
+    } else {
+        let latest = db.get_latest_block_number()?;
+        info!("Resuming from block #{}", latest);
+    }
+
+    // Initialize mempool
+    let mempool = Arc::new(Mempool::new(10_000));
+
+    // Initialize wallet manager
+    let wallet_manager = Arc::new(WalletManager::new(
+        db.clone(),
+        &config.stellar_friendbot_url,
+        config.tva_master_seed.as_deref(),
+    ));
+
+    // Create chain state
+    let chain = ChainState {
+        db: db.clone(),
+        mempool: mempool.clone(),
+        wallet_manager: wallet_manager.clone(),
+    };
+
+    // Create shared RPC state
     let state = Arc::new(RpcState {
         config: config.clone(),
-        soroban_client,
-        abi_registry,
+        soroban_client: soroban_client.clone(),
+        abi_registry: abi_registry.clone(),
+        chain,
     });
+
+    // --- Spawn Background Tasks ---
+
+    // Sequencer: produces blocks every N ms
+    let sequencer = Arc::new(Sequencer::new(
+        db.clone(),
+        mempool.clone(),
+        config.tva_block_interval_ms,
+    ));
+    let seq_handle = sequencer.clone();
+    tokio::spawn(async move { seq_handle.run().await });
+
+    // Settlement engine: submits to Stellar and monitors finality
+    let settlement = Arc::new(SettlementEngine::new(
+        db.clone(),
+        Arc::new(soroban_client.clone()),
+        Arc::new(config.clone()),
+        abi_registry.clone(),
+    ));
+    let settle_handle = settlement.clone();
+    tokio::spawn(async move { settle_handle.run().await });
+
+    // --- Start RPC Server ---
 
     // Build the RPC module
     let mut module = RpcModule::new(state.clone());
-
-    // Register all RPC methods
     register_methods(&mut module)?;
 
-    // CORS middleware - allow all origins for development
+    // CORS middleware
     let cors = CorsLayer::new()
         .allow_origin(AllowOrigin::any())
         .allow_methods(Any)
@@ -70,22 +130,21 @@ pub async fn start_server(config: Config) -> Result<()> {
 
     let middleware = ServiceBuilder::new().layer(cors);
 
-    // Start the server with CORS
     let server = Server::builder()
         .set_http_middleware(middleware)
         .build(addr)
         .await
         .map_err(|e| anyhow!("Failed to bind server to {}: {}", addr, e))?;
 
-    info!("TVA RPC Server listening on http://{}", addr);
-    info!("Compatible with MetaMask, Hardhat, ethers.js, and other EVM tooling");
+    info!("=== TVA Node Ready ===");
+    info!("RPC endpoint: http://{}", addr);
+    info!("Block interval: {}ms", config.tva_block_interval_ms);
+    info!("Compatible with MetaMask, Hardhat, ethers.js, Blockscout");
 
     let handle = server.start(module);
-
-    // Wait for the server to finish (runs until shutdown signal)
     handle.stopped().await;
 
-    info!("TVA RPC Server stopped");
+    info!("TVA Node stopped");
     Ok(())
 }
 
@@ -102,21 +161,21 @@ fn register_methods(module: &mut RpcModule<Arc<RpcState>>) -> Result<()> {
 
     module.register_async_method("eth_blockNumber", |params, ctx, _| async move {
         let _ = params;
-        eth::block_number(&ctx.soroban_client)
+        eth::block_number(&ctx.chain.db)
             .await
             .map_err(|e| jsonrpsee_error(&e.to_string()))
     })?;
 
     module.register_async_method("eth_getBlockByNumber", |params, ctx, _| async move {
         let p: Vec<serde_json::Value> = params.parse().unwrap_or_default();
-        eth::get_block_by_number(&ctx.soroban_client, &p)
+        eth::get_block_by_number(&ctx.chain.db, &p)
             .await
             .map_err(|e| jsonrpsee_error(&e.to_string()))
     })?;
 
     module.register_async_method("eth_getBlockByHash", |params, ctx, _| async move {
         let p: Vec<serde_json::Value> = params.parse().unwrap_or_default();
-        eth::get_block_by_hash(&ctx.soroban_client, &p)
+        eth::get_block_by_hash(&ctx.chain.db, &p)
             .await
             .map_err(|e| jsonrpsee_error(&e.to_string()))
     })?;
@@ -130,21 +189,26 @@ fn register_methods(module: &mut RpcModule<Arc<RpcState>>) -> Result<()> {
 
     module.register_async_method("eth_sendRawTransaction", |params, ctx, _| async move {
         let p: Vec<serde_json::Value> = params.parse().unwrap_or_default();
-        eth::send_raw_transaction(&ctx.soroban_client, &ctx.config, &ctx.abi_registry, &p)
-            .await
-            .map_err(|e| jsonrpsee_error(&e.to_string()))
+        eth::send_raw_transaction(
+            &ctx.chain.mempool,
+            &ctx.chain.db,
+            &ctx.chain.wallet_manager,
+            &p,
+        )
+        .await
+        .map_err(|e| jsonrpsee_error(&e.to_string()))
     })?;
 
     module.register_async_method("eth_getTransactionReceipt", |params, ctx, _| async move {
         let p: Vec<serde_json::Value> = params.parse().unwrap_or_default();
-        eth::get_transaction_receipt(&ctx.soroban_client, &p)
+        eth::get_transaction_receipt(&ctx.chain.db, &p)
             .await
             .map_err(|e| jsonrpsee_error(&e.to_string()))
     })?;
 
     module.register_async_method("eth_getTransactionByHash", |params, ctx, _| async move {
         let p: Vec<serde_json::Value> = params.parse().unwrap_or_default();
-        eth::get_transaction_by_hash(&ctx.soroban_client, &p)
+        eth::get_transaction_by_hash(&ctx.chain.db, &p)
             .await
             .map_err(|e| jsonrpsee_error(&e.to_string()))
     })?;
@@ -158,7 +222,7 @@ fn register_methods(module: &mut RpcModule<Arc<RpcState>>) -> Result<()> {
 
     module.register_async_method("eth_getBalance", |params, ctx, _| async move {
         let p: Vec<serde_json::Value> = params.parse().unwrap_or_default();
-        eth::get_balance(&ctx.soroban_client, &p)
+        eth::get_balance(&ctx.chain.db, &ctx.soroban_client, &p)
             .await
             .map_err(|e| jsonrpsee_error(&e.to_string()))
     })?;
@@ -179,7 +243,7 @@ fn register_methods(module: &mut RpcModule<Arc<RpcState>>) -> Result<()> {
 
     module.register_async_method("eth_getTransactionCount", |params, ctx, _| async move {
         let p: Vec<serde_json::Value> = params.parse().unwrap_or_default();
-        eth::get_transaction_count(&ctx.soroban_client, &p)
+        eth::get_transaction_count(&ctx.chain.db, &p)
             .await
             .map_err(|e| jsonrpsee_error(&e.to_string()))
     })?;
@@ -228,6 +292,71 @@ fn register_methods(module: &mut RpcModule<Arc<RpcState>>) -> Result<()> {
             .map_err(|e| jsonrpsee_error(&e.to_string()))
     })?;
 
+    // --- Blockscout-required methods ---
+
+    module.register_async_method("eth_getBlockTransactionCountByNumber", |params, ctx, _| async move {
+        let p: Vec<serde_json::Value> = params.parse().unwrap_or_default();
+        eth::get_block_transaction_count_by_number(&ctx.chain.db, &p)
+            .await
+            .map_err(|e| jsonrpsee_error(&e.to_string()))
+    })?;
+
+    module.register_async_method("eth_getBlockTransactionCountByHash", |params, ctx, _| async move {
+        let p: Vec<serde_json::Value> = params.parse().unwrap_or_default();
+        eth::get_block_transaction_count_by_hash(&ctx.chain.db, &p)
+            .await
+            .map_err(|e| jsonrpsee_error(&e.to_string()))
+    })?;
+
+    module.register_async_method("eth_getTransactionByBlockNumberAndIndex", |params, ctx, _| async move {
+        let p: Vec<serde_json::Value> = params.parse().unwrap_or_default();
+        eth::get_transaction_by_block_number_and_index(&ctx.chain.db, &p)
+            .await
+            .map_err(|e| jsonrpsee_error(&e.to_string()))
+    })?;
+
+    module.register_async_method("eth_getTransactionByBlockHashAndIndex", |params, ctx, _| async move {
+        let p: Vec<serde_json::Value> = params.parse().unwrap_or_default();
+        eth::get_transaction_by_block_hash_and_index(&ctx.chain.db, &p)
+            .await
+            .map_err(|e| jsonrpsee_error(&e.to_string()))
+    })?;
+
+    module.register_async_method("eth_getUncleCountByBlockNumber", |params, _ctx, _| async move {
+        let p: Vec<serde_json::Value> = params.parse().unwrap_or_default();
+        eth::get_uncle_count_by_block_number(&p)
+            .await
+            .map_err(|e| jsonrpsee_error(&e.to_string()))
+    })?;
+
+    module.register_async_method("eth_getUncleCountByBlockHash", |params, _ctx, _| async move {
+        let p: Vec<serde_json::Value> = params.parse().unwrap_or_default();
+        eth::get_uncle_count_by_block_hash(&p)
+            .await
+            .map_err(|e| jsonrpsee_error(&e.to_string()))
+    })?;
+
+    module.register_async_method("eth_getUncleByBlockHashAndIndex", |params, _ctx, _| async move {
+        let p: Vec<serde_json::Value> = params.parse().unwrap_or_default();
+        eth::get_uncle_by_block_hash_and_index(&p)
+            .await
+            .map_err(|e| jsonrpsee_error(&e.to_string()))
+    })?;
+
+    module.register_async_method("eth_getUncleByBlockNumberAndIndex", |params, _ctx, _| async move {
+        let p: Vec<serde_json::Value> = params.parse().unwrap_or_default();
+        eth::get_uncle_by_block_number_and_index(&p)
+            .await
+            .map_err(|e| jsonrpsee_error(&e.to_string()))
+    })?;
+
+    module.register_async_method("eth_getBlockReceipts", |params, ctx, _| async move {
+        let p: Vec<serde_json::Value> = params.parse().unwrap_or_default();
+        eth::get_block_receipts(&ctx.chain.db, &p)
+            .await
+            .map_err(|e| jsonrpsee_error(&e.to_string()))
+    })?;
+
     // --- net_* methods ---
 
     module.register_async_method("net_version", |_params, ctx, _| async move {
@@ -263,23 +392,111 @@ fn register_methods(module: &mut RpcModule<Arc<RpcState>>) -> Result<()> {
             .map_err(|e| jsonrpsee_error(&e.to_string()))
     })?;
 
+    // --- tva_* methods (TVA-specific) ---
+
+    module.register_async_method("tva_verifyContract", |params, ctx, _| async move {
+        let p: Vec<serde_json::Value> = params.parse().unwrap_or_default();
+        eth::verify_contract(&ctx.soroban_client, &ctx.config, &p)
+            .await
+            .map_err(|e| jsonrpsee_error(&e.to_string()))
+    })?;
+
+    module.register_async_method("tva_getVerifiedSource", |params, ctx, _| async move {
+        let p: Vec<serde_json::Value> = params.parse().unwrap_or_default();
+        eth::get_verified_source(&ctx.soroban_client, &ctx.config, &p)
+            .await
+            .map_err(|e| jsonrpsee_error(&e.to_string()))
+    })?;
+
+    // --- tva_account* methods (Account Registry) ---
+
+    module.register_async_method("tva_getAccount", |params, ctx, _| async move {
+        let p: Vec<serde_json::Value> = params.parse().unwrap_or_default();
+        let evm_address = p.first()
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| jsonrpsee_error("Missing evm_address parameter"))?;
+        let account = ctx.chain.db.get_account(evm_address)
+            .map_err(|e| jsonrpsee_error(&e.to_string()))?;
+        let result = match account {
+            Some(acc) => serde_json::json!({
+                "evmAddress": acc.evm_address,
+                "stellarAddress": acc.stellar_address,
+                "nonce": format!("0x{:x}", acc.nonce),
+                "funded": acc.funded,
+                "registered": acc.registered,
+                "createdAt": acc.created_at,
+            }),
+            None => serde_json::Value::Null,
+        };
+        Ok::<serde_json::Value, jsonrpsee::types::ErrorObjectOwned>(result)
+    })?;
+
+    module.register_async_method("tva_getAccountByStellar", |params, ctx, _| async move {
+        let p: Vec<serde_json::Value> = params.parse().unwrap_or_default();
+        let stellar_address = p.first()
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| jsonrpsee_error("Missing stellar_address parameter"))?;
+        let account = ctx.chain.db.get_account_by_stellar(stellar_address)
+            .map_err(|e| jsonrpsee_error(&e.to_string()))?;
+        let result = match account {
+            Some(acc) => serde_json::json!({
+                "evmAddress": acc.evm_address,
+                "stellarAddress": acc.stellar_address,
+                "nonce": format!("0x{:x}", acc.nonce),
+                "funded": acc.funded,
+                "registered": acc.registered,
+                "createdAt": acc.created_at,
+            }),
+            None => serde_json::Value::Null,
+        };
+        Ok::<serde_json::Value, jsonrpsee::types::ErrorObjectOwned>(result)
+    })?;
+
+    module.register_async_method("tva_registerAccount", |params, ctx, _| async move {
+        let p: Vec<serde_json::Value> = params.parse().unwrap_or_default();
+        let evm_address = p.first()
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| jsonrpsee_error("Missing evm_address parameter"))?;
+
+        // Create mirror account (derives Stellar keypair, stores in DB)
+        let account = ctx.chain.wallet_manager.ensure_account(evm_address)
+            .await
+            .map_err(|e| jsonrpsee_error(&e.to_string()))?;
+
+        // Mark as explicitly registered
+        ctx.chain.db.set_account_registered(evm_address, true)
+            .map_err(|e| jsonrpsee_error(&e.to_string()))?;
+
+        Ok::<serde_json::Value, jsonrpsee::types::ErrorObjectOwned>(serde_json::json!({
+            "evmAddress": account.evm_address,
+            "stellarAddress": account.stellar_address,
+            "registered": true,
+        }))
+    })?;
+
+    module.register_async_method("tva_getRegistrationCount", |_params, ctx, _| async move {
+        let count = ctx.chain.db.get_registration_count()
+            .map_err(|e| jsonrpsee_error(&e.to_string()))?;
+        Ok::<serde_json::Value, jsonrpsee::types::ErrorObjectOwned>(serde_json::json!({
+            "count": count,
+            "countHex": format!("0x{:x}", count),
+        }))
+    })?;
+
     // --- Additional compatibility methods ---
 
-    // eth_protocolVersion
     module.register_async_method("eth_protocolVersion", |_params, _ctx, _| async move {
         Ok::<serde_json::Value, jsonrpsee::types::ErrorObjectOwned>(
-            serde_json::Value::String("0x41".to_string()), // Protocol version 65
+            serde_json::Value::String("0x41".to_string()),
         )
     })?;
 
-    // eth_maxPriorityFeePerGas (EIP-1559)
     module.register_async_method("eth_maxPriorityFeePerGas", |_params, _ctx, _| async move {
         Ok::<serde_json::Value, jsonrpsee::types::ErrorObjectOwned>(
-            serde_json::Value::String("0x3b9aca00".to_string()), // 1 gwei
+            serde_json::Value::String("0x3b9aca00".to_string()),
         )
     })?;
 
-    // eth_feeHistory (EIP-1559)
     module.register_async_method("eth_feeHistory", |_params, _ctx, _| async move {
         let response = serde_json::json!({
             "baseFeePerGas": ["0x3b9aca00"],
@@ -290,14 +507,14 @@ fn register_methods(module: &mut RpcModule<Arc<RpcState>>) -> Result<()> {
         Ok::<serde_json::Value, jsonrpsee::types::ErrorObjectOwned>(response)
     })?;
 
-    info!("Registered all RPC methods successfully");
+    info!("Registered all RPC methods");
     Ok(())
 }
 
 /// Create a jsonrpsee error from a string message.
 fn jsonrpsee_error(message: &str) -> jsonrpsee::types::ErrorObjectOwned {
     jsonrpsee::types::ErrorObjectOwned::owned(
-        -32603, // Internal error
+        -32603,
         message.to_string(),
         None::<()>,
     )
