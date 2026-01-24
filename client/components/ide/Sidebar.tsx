@@ -4,10 +4,6 @@ import React, { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Folder, File, useProject } from "./useProjectState";
 
-interface SidebarProps {
-    activeView: "explorer" | "search" | "git" | "debug" | "extensions";
-}
-
 // ─── ICONS (Larger sizes) ─────────────────────────────────────────────────────
 
 const ChevronIcon = ({ open }: { open: boolean }) => (
@@ -171,7 +167,7 @@ function InlineInput({ initial, onSubmit, onCancel }: { initial: string; onSubmi
 
 // ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
 
-export default function Sidebar({ activeView }: SidebarProps) {
+export default function Sidebar() {
     const {
         project, activeFileId, setActiveFileId,
         createFile, renameFile, deleteFile, createFolder, deleteFolder,
@@ -186,7 +182,9 @@ export default function Sidebar({ activeView }: SidebarProps) {
     const [creatingFolder, setCreatingFolder] = useState<string | null>(null);
     const [renamingId, setRenamingId] = useState<string | null>(null);
     const [copied, setCopied] = useState(false);
-    const [buildExpanded, setBuildExpanded] = useState(true);
+
+    // Split View State
+    const [bottomPanelHeight, setBottomPanelHeight] = useState("45%");
 
     const toggleFolder = (id: string) => {
         setExpandedFolders((prev) => {
@@ -202,7 +200,7 @@ export default function Sidebar({ activeView }: SidebarProps) {
         setTimeout(() => setCopied(false), 1500);
     };
 
-    // ─── FILE TREE ────────────────────────────────────────────────────────────
+    // ─── FILE TREE RENDERERS ────────────────────────────────────────────────
 
     const RenderFile = ({ file, depth }: { file: File; depth: number }) => {
         const isActive = activeFileId === file.id;
@@ -236,7 +234,6 @@ export default function Sidebar({ activeView }: SidebarProps) {
                 }}
                 transition={{ duration: 0.15 }}
             >
-                {/* Active indicator */}
                 <AnimatePresence>
                     {isActive && (
                         <motion.div
@@ -344,7 +341,7 @@ export default function Sidebar({ activeView }: SidebarProps) {
     const PipelineStep = ({ label, status, step }: { label: string; status: "idle" | "active" | "done" | "error"; step: number }) => {
         const colors = { idle: "#2a2a2a", active: "#FFC800", done: "#22C55E", error: "#EF4444" };
         return (
-            <div className="flex flex-col items-center gap-1.5">
+            <div className="flex flex-col items-center gap-1.5 flex-1">
                 <div className="relative flex items-center justify-center w-6 h-6">
                     {status === "active" ? (
                         <motion.div
@@ -367,7 +364,7 @@ export default function Sidebar({ activeView }: SidebarProps) {
                         </div>
                     )}
                 </div>
-                <span className={`text-[10px] font-medium ${status === "active" ? "text-[#FFC800]" : status === "done" ? "text-[#22C55E]" : status === "error" ? "text-[#EF4444]" : "text-[#404040]"}`}>
+                <span className={`text-[9px] uppercase tracking-wide font-semibold ${status === "active" ? "text-[#FFC800]" : status === "done" ? "text-[#22C55E]" : status === "error" ? "text-[#EF4444]" : "text-[#404040]"}`}>
                     {label}
                 </span>
             </div>
@@ -396,170 +393,7 @@ export default function Sidebar({ activeView }: SidebarProps) {
         return "idle" as const;
     };
 
-    // ─── BLOCKCHAIN VIEW (Wallet + Explorer combined) ─────────────────────────
-
-    if (activeView === "extensions" || activeView === "debug") {
-        return (
-            <motion.div
-                className="w-[300px] flex flex-col h-full select-none relative overflow-hidden"
-                style={{ background: 'linear-gradient(180deg, #050505 0%, #000000 100%)' }}
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ duration: 0.3 }}
-            >
-                {/* Background effects */}
-                <div className="absolute inset-0 pointer-events-none">
-                    <div className="absolute -top-20 -left-20 w-48 h-48 bg-[#FFC800]/[0.03] rounded-full blur-3xl" />
-                    <div className="absolute right-0 top-0 bottom-0 w-[1px] bg-gradient-to-b from-[#FFC800]/15 via-[#1a1a1a] to-transparent" />
-                </div>
-
-                {/* Header */}
-                <div className="relative h-14 flex items-center px-5 border-b border-[#151515] shrink-0">
-                    <div className="absolute bottom-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-[#FFC800]/20 to-transparent" />
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#FFC800" strokeWidth="1.5" className="mr-3 opacity-70">
-                        <rect x="2" y="6" width="20" height="14" rx="2" />
-                        <path d="M2 10h20" />
-                        <circle cx="16" cy="14" r="2" />
-                    </svg>
-                    <span className="text-[13px] font-semibold text-[#505050] uppercase tracking-[0.15em]">
-                        Blockchain
-                    </span>
-                </div>
-
-                <div className="flex-1 overflow-y-auto p-5 space-y-5 relative z-10">
-                    {/* Wallet Section */}
-                    <div className="space-y-4">
-                        <div className="text-[11px] text-[#404040] uppercase tracking-[0.2em] font-semibold">Wallet</div>
-
-                        {isWalletConnected ? (
-                            <div className="space-y-4">
-                                {/* Status */}
-                                <div className="flex items-center gap-3">
-                                    <div className="w-3 h-3 rounded-full bg-[#22C55E] shadow-[0_0_10px_#22C55E]" />
-                                    <span className="text-[14px] text-[#22C55E] font-medium">Connected</span>
-                                </div>
-
-                                {/* Address */}
-                                <div className="p-4 rounded-xl bg-[#0a0a0a] border border-[#1a1a1a] space-y-2">
-                                    <div className="text-[11px] text-[#404040] uppercase tracking-wider font-semibold">Address</div>
-                                    <div className="flex items-center gap-3">
-                                        <span className="text-[13px] font-mono text-[#707070] truncate flex-1">
-                                            {walletAddress}
-                                        </span>
-                                        <motion.button
-                                            onClick={() => handleCopy(walletAddress || "")}
-                                            className="text-[#505050] hover:text-[#FFC800] transition-colors p-1"
-                                            whileHover={{ scale: 1.1 }}
-                                            whileTap={{ scale: 0.9 }}
-                                        >
-                                            <CopyIcon />
-                                        </motion.button>
-                                    </div>
-                                </div>
-
-                                {/* Balance */}
-                                <div className="p-4 rounded-xl bg-[#0a0a0a] border border-[#1a1a1a]">
-                                    <div className="text-[11px] text-[#404040] uppercase tracking-wider font-semibold mb-2">Balance</div>
-                                    <div className="text-[28px] font-mono text-[#FFC800] font-bold">
-                                        {walletBalance}
-                                        <span className="text-[14px] text-[#505050] ml-2">XLM</span>
-                                    </div>
-                                </div>
-
-                                {/* Network */}
-                                <div className="p-4 rounded-xl bg-[#0a0a0a] border border-[#1a1a1a]">
-                                    <div className="text-[11px] text-[#404040] uppercase tracking-wider font-semibold mb-2">Network</div>
-                                    <div className="flex items-center gap-3">
-                                        <div className="w-2.5 h-2.5 rounded-full bg-[#22C55E]" />
-                                        <span className="text-[14px] text-[#808080]">Stellar Testnet</span>
-                                    </div>
-                                </div>
-
-                                {/* Disconnect */}
-                                <motion.button
-                                    onClick={disconnectWallet}
-                                    className="w-full h-12 text-[14px] font-semibold text-[#606060] border border-[#252525] rounded-xl hover:border-[#EF4444]/50 hover:text-[#EF4444] transition-all"
-                                    whileTap={{ scale: 0.98 }}
-                                >
-                                    Disconnect Wallet
-                                </motion.button>
-                            </div>
-                        ) : (
-                            <div className="py-8 flex flex-col items-center gap-5">
-                                <div className="w-20 h-20 rounded-2xl bg-[#FFC800]/10 border border-[#FFC800]/20 flex items-center justify-center">
-                                    <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#FFC800" strokeWidth="1.5">
-                                        <rect x="2" y="6" width="20" height="14" rx="2" />
-                                        <path d="M2 10h20" />
-                                        <circle cx="16" cy="14" r="2" />
-                                    </svg>
-                                </div>
-                                <div className="text-center space-y-2">
-                                    <div className="text-[16px] text-white font-medium">Connect Wallet</div>
-                                    <div className="text-[13px] text-[#505050] leading-relaxed max-w-[200px]">
-                                        Connect to deploy contracts on Stellar testnet
-                                    </div>
-                                </div>
-                                <motion.button
-                                    onClick={connectWallet}
-                                    className="w-full h-14 text-[15px] font-bold text-black bg-[#FFC800] rounded-xl shadow-[0_0_30px_rgba(255,200,0,0.2)]"
-                                    whileHover={{ scale: 1.02, boxShadow: '0 0 40px rgba(255, 200, 0, 0.3)' }}
-                                    whileTap={{ scale: 0.98 }}
-                                >
-                                    Connect MetaMask
-                                </motion.button>
-                            </div>
-                        )}
-                    </div>
-
-                    {/* Deployed Contracts Section */}
-                    {deployResult?.success && (
-                        <div className="space-y-4 pt-4 border-t border-[#151515]">
-                            <div className="text-[11px] text-[#404040] uppercase tracking-[0.2em] font-semibold">Deployed Contracts</div>
-                            <div className="p-4 rounded-xl bg-[#0a0a0a] border border-[#1a1a1a] space-y-3">
-                                <div className="text-[14px] text-white font-medium">
-                                    {deployResult.contractId?.slice(0, 12)}...{deployResult.contractId?.slice(-6)}
-                                </div>
-                                {deployResult.explorerUrl && (
-                                    <a
-                                        href={deployResult.explorerUrl}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="flex items-center gap-2 text-[13px] text-[#3B82F6] hover:text-[#60a5fa] transition-colors"
-                                    >
-                                        <ExternalLinkIcon />
-                                        <span>View on Explorer</span>
-                                    </a>
-                                )}
-                            </div>
-                        </div>
-                    )}
-                </div>
-            </motion.div>
-        );
-    }
-
-    // ─── SEARCH VIEW (minimal) ────────────────────────────────────────────────
-
-    if (activeView === "search") {
-        return (
-            <motion.div
-                className="w-[300px] flex flex-col h-full select-none relative overflow-hidden"
-                style={{ background: 'linear-gradient(180deg, #050505 0%, #000000 100%)' }}
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-            >
-                <div className="absolute right-0 top-0 bottom-0 w-[1px] bg-gradient-to-b from-[#FFC800]/15 via-[#1a1a1a] to-transparent" />
-                <div className="h-14 flex items-center px-5 border-b border-[#151515]">
-                    <span className="text-[13px] font-semibold text-[#505050] uppercase tracking-[0.15em]">Search</span>
-                </div>
-                <div className="flex-1 flex items-center justify-center">
-                    <span className="text-[14px] text-[#303030]">Coming soon</span>
-                </div>
-            </motion.div>
-        );
-    }
-
-    // ─── WORKSPACE VIEW (Files + Build combined) ──────────────────────────────
+    // ─── MAIN COMPONENT RENDER ────────────────────────────────────────────────
 
     return (
         <motion.div
@@ -567,58 +401,53 @@ export default function Sidebar({ activeView }: SidebarProps) {
             style={{ background: 'linear-gradient(180deg, #050505 0%, #000000 100%)' }}
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
+            transition={{ duration: 0.3 }}
         >
             {/* Background effects */}
-            <div className="absolute inset-0 pointer-events-none">
+            <div className="absolute inset-0 pointer-events-none z-0">
                 <div className="absolute -top-20 -left-20 w-48 h-48 bg-[#FFC800]/[0.03] rounded-full blur-3xl" />
                 <div className="absolute right-0 top-0 bottom-0 w-[1px] bg-gradient-to-b from-[#FFC800]/15 via-[#1a1a1a] to-transparent" />
             </div>
 
-            {/* Header */}
-            <div className="relative h-14 flex items-center justify-between px-5 border-b border-[#151515] shrink-0">
-                <div className="absolute bottom-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-[#FFC800]/20 to-transparent" />
-                <div className="flex items-center">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#FFC800" strokeWidth="1.5" className="mr-3 opacity-70">
-                        <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z" />
-                    </svg>
-                    <span className="text-[13px] font-semibold text-[#505050] uppercase tracking-[0.15em]">
-                        Workspace
+            {/* ─── TOP SECTION: FILES ────────────────────────────────────────── */}
+            <div className="flex-1 flex flex-col min-h-0 bg-gradient-to-b from-[#050505] to-[#020202] z-10" style={{ height: `calc(100% - ${bottomPanelHeight})` }}>
+                {/* Files Header */}
+                <div className="relative h-14 flex items-center justify-between px-4 border-b border-[#151515] shrink-0">
+                    <div className="absolute bottom-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-[#FFC800]/20 to-transparent" />
+                    <span className="text-[12px] font-semibold text-[#606060] uppercase tracking-[0.15em]">
+                        Files
                     </span>
+                    <div className="flex items-center gap-1">
+                        <motion.button
+                            onClick={() => setCreatingFile("root")}
+                            className="w-7 h-7 flex items-center justify-center rounded-lg text-[#505050] hover:text-[#FFC800] hover:bg-[#FFC800]/10 transition-colors"
+                            whileHover={{ scale: 1.05 }}
+                            whileTap={{ scale: 0.95 }}
+                            title="New file"
+                        >
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
+                                <path d="M14 2v6h6M12 18v-6M9 15h6" />
+                            </svg>
+                        </motion.button>
+                        <motion.button
+                            onClick={() => setCreatingFolder("root")}
+                            className="w-7 h-7 flex items-center justify-center rounded-lg text-[#505050] hover:text-[#FFC800] hover:bg-[#FFC800]/10 transition-colors"
+                            whileHover={{ scale: 1.05 }}
+                            whileTap={{ scale: 0.95 }}
+                            title="New folder"
+                        >
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z" />
+                                <path d="M12 11v6M9 14h6" />
+                            </svg>
+                        </motion.button>
+                    </div>
                 </div>
-                <div className="flex items-center gap-2">
-                    <motion.button
-                        onClick={() => setCreatingFile("root")}
-                        className="w-8 h-8 flex items-center justify-center rounded-lg text-[#505050] hover:text-[#FFC800] hover:bg-[#FFC800]/10 transition-colors"
-                        whileHover={{ scale: 1.05 }}
-                        whileTap={{ scale: 0.95 }}
-                        title="New file"
-                    >
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-                            <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
-                            <path d="M14 2v6h6M12 18v-6M9 15h6" />
-                        </svg>
-                    </motion.button>
-                    <motion.button
-                        onClick={() => setCreatingFolder("root")}
-                        className="w-8 h-8 flex items-center justify-center rounded-lg text-[#505050] hover:text-[#FFC800] hover:bg-[#FFC800]/10 transition-colors"
-                        whileHover={{ scale: 1.05 }}
-                        whileTap={{ scale: 0.95 }}
-                        title="New folder"
-                    >
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-                            <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z" />
-                            <path d="M12 11v6M9 14h6" />
-                        </svg>
-                    </motion.button>
-                </div>
-            </div>
 
-            {/* Content */}
-            <div className="flex-1 overflow-y-auto relative z-10">
-                {/* File Tree - directly rendered */}
+                {/* File Tree Content */}
                 <div
-                    className="py-3"
+                    className="flex-1 overflow-y-auto py-2 custom-scrollbar"
                     onContextMenu={(e) => {
                         if (e.target === e.currentTarget) {
                             e.preventDefault();
@@ -634,121 +463,151 @@ export default function Sidebar({ activeView }: SidebarProps) {
                 >
                     <RenderFolder folder={project.root} depth={0} />
                 </div>
+            </div>
 
-                {/* Divider */}
-                <div className="mx-5 h-[1px] bg-gradient-to-r from-transparent via-[#222] to-transparent" />
+            {/* ─── RESIZE HANDLE / DIVIDER ───────────────────────────────────── */}
+            <div className="h-[1px] bg-[#1a1a1a] shrink-0 relative z-20">
+                <div className="absolute inset-x-0 -top-1 -bottom-1 cursor-row-resize z-30" />
+            </div>
 
-                {/* Build Section */}
-                {(activeView === "explorer" || activeView === "git") && (
-                    <div className="p-5 space-y-4">
-                        {/* Build Header */}
-                        <motion.button
-                            onClick={() => setBuildExpanded(!buildExpanded)}
-                            className="flex items-center gap-3 w-full text-left group"
-                        >
-                            <ChevronIcon open={buildExpanded} />
-                            <span className="text-[12px] text-[#505050] group-hover:text-[#707070] uppercase tracking-[0.15em] font-semibold transition-colors">
-                                Build & Deploy
-                            </span>
-                            {/* Network status dot inline */}
-                            <div className="ml-auto flex items-center gap-2">
-                                <div className="w-2 h-2 rounded-full bg-[#22C55E] shadow-[0_0_6px_#22C55E]" />
-                                <span className="text-[10px] text-[#404040] font-mono">testnet</span>
+            {/* ─── BOTTOM SECTION: WALLET & DEPLOY ───────────────────────────── */}
+            <div className="flex flex-col min-h-0 bg-[#020202] z-10" style={{ height: bottomPanelHeight }}>
+                {/* Header */}
+                <div className="relative h-10 flex items-center px-4 border-b border-[#151515] shrink-0 bg-[#050505]">
+                    <span className="text-[11px] font-semibold text-[#606060] uppercase tracking-[0.15em]">
+                        Blockchain & Deploy
+                    </span>
+                    {/* Connection Status Dot */}
+                    <div className={`ml-auto w-2 h-2 rounded-full ${isWalletConnected ? 'bg-[#22C55E] shadow-[0_0_8px_#22C55E]' : 'bg-[#333]'}`} />
+                </div>
+
+                <div className="flex-1 overflow-y-auto p-4 space-y-6">
+
+                    {/* 1. Wallet Connection */}
+                    <div className="space-y-3">
+                        {isWalletConnected ? (
+                            <div className="p-3 rounded-lg bg-[#0a0a0a] border border-[#1a1a1a] space-y-3">
+                                <div className="flex items-center justify-between">
+                                    <span className="text-[11px] text-[#505050] font-medium uppercase tracking-wider">Account</span>
+                                    <motion.button onClick={disconnectWallet} className="text-[10px] text-[#EF4444] hover:underline">Disconnect</motion.button>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <span className="text-[12px] font-mono text-[#808080] truncate flex-1">{walletAddress}</span>
+                                    <motion.button onClick={() => handleCopy(walletAddress || "")} className="p-1 hover:text-[#FFC800] text-[#505050]"><CopyIcon size={12} /></motion.button>
+                                </div>
+                                <div className="pt-2 border-t border-[#151515] flex justify-between items-end">
+                                    <span className="text-[10px] text-[#505050]">Balance</span>
+                                    <span className="text-[14px] text-[#FFC800] font-mono">{walletBalance} <span className="text-[#505050] text-[10px]">XLM</span></span>
+                                </div>
                             </div>
+                        ) : (
+                            <motion.button
+                                onClick={connectWallet}
+                                className="w-full py-3 px-4 rounded-lg bg-[#FFC800]/10 border border-[#FFC800]/20 hover:bg-[#FFC800]/20 hover:border-[#FFC800]/40 transition-all flex items-center justify-center gap-2 group"
+                                whileTap={{ scale: 0.98 }}
+                            >
+                                <div className="w-2 h-2 rounded-full bg-[#FFC800] group-hover:shadow-[0_0_8px_#FFC800]" />
+                                <span className="text-[12px] font-semibold text-[#FFC800]">Connect Wallet</span>
+                            </motion.button>
+                        )}
+                    </div>
+
+                    {/* 2. Build Pipeline */}
+                    <div className="space-y-3">
+                        <div className="text-[11px] text-[#505050] font-medium uppercase tracking-wider">Build Pipeline</div>
+
+                        {/* Steps Visualization */}
+                        <div className="flex items-center justify-between px-2 py-2">
+                            <PipelineStep label="Compile" status={getStepStatus("compile")} step={1} />
+                            <div className="w-4 h-[1px] bg-[#222] mt-[-10px]" />
+                            <PipelineStep label="Verify" status={getStepStatus("verify")} step={2} />
+                            <div className="w-4 h-[1px] bg-[#222] mt-[-10px]" />
+                            <PipelineStep label="Deploy" status={getStepStatus("deploy")} step={3} />
+                        </div>
+
+                        {/* Action Button */}
+                        <motion.button
+                            onClick={() => {
+                                if (!compileResult?.success) compile();
+                                else if (!verifyResult?.verified) verify();
+                                else deploy();
+                            }}
+                            disabled={buildStatus === "compiling" || buildStatus === "verifying" || buildStatus === "deploying"}
+                            className="w-full h-10 text-[12px] font-bold text-black bg-[#FFC800] rounded-md shadow-lg shadow-[#FFC800]/10 hover:shadow-[#FFC800]/20 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 relative overflow-hidden"
+                            whileHover={{ scale: 1.01 }}
+                            whileTap={{ scale: 0.98 }}
+                        >
+                            {/* Loading spinner */}
+                            {(buildStatus === "compiling" || buildStatus === "verifying" || buildStatus === "deploying") && (
+                                <motion.div
+                                    className="w-3 h-3 border-2 border-black/30 border-t-black rounded-full"
+                                    animate={{ rotate: 360 }}
+                                    transition={{ repeat: Infinity, duration: 1, ease: 'linear' }}
+                                />
+                            )}
+                            <span className="relative z-10">
+                                {buildStatus === "compiling" ? "Compiling..." :
+                                    buildStatus === "verifying" ? "Verifying..." :
+                                        buildStatus === "deploying" ? "Deploying..." :
+                                            !compileResult?.success ? "Compile Contract" :
+                                                !verifyResult?.verified ? "Verify & Build" : "Deploy to Testnet"}
+                            </span>
                         </motion.button>
 
-                        <AnimatePresence>
-                            {buildExpanded && (
-                                <motion.div
-                                    initial={{ height: 0, opacity: 0 }}
-                                    animate={{ height: "auto", opacity: 1 }}
-                                    exit={{ height: 0, opacity: 0 }}
-                                    transition={{ duration: 0.2 }}
-                                    className="space-y-4 overflow-hidden"
-                                >
-                                    {/* Pipeline - more compact */}
-                                    <div className="flex items-center justify-between px-1">
-                                        <PipelineStep label="Compile" status={getStepStatus("compile")} step={1} />
-                                        <div className="w-6 h-[1px] bg-[#222]" />
-                                        <PipelineStep label="Verify" status={getStepStatus("verify")} step={2} />
-                                        <div className="w-6 h-[1px] bg-[#222]" />
-                                        <PipelineStep label="Deploy" status={getStepStatus("deploy")} step={3} />
-                                    </div>
-
-                                    {/* Single action button - context aware */}
-                                    <motion.button
-                                        onClick={() => {
-                                            if (!compileResult?.success) compile();
-                                            else if (!verifyResult?.verified) verify();
-                                            else deploy();
-                                        }}
-                                        disabled={buildStatus === "compiling" || buildStatus === "verifying" || buildStatus === "deploying"}
-                                        className="w-full h-11 text-[13px] font-semibold rounded-lg relative overflow-hidden disabled:cursor-not-allowed group"
-                                        style={{
-                                            background: 'linear-gradient(135deg, #FFC800 0%, #E5B400 100%)',
-                                            boxShadow: '0 0 20px rgba(255, 200, 0, 0.15)'
-                                        }}
-                                        whileHover={{ boxShadow: '0 0 30px rgba(255, 200, 0, 0.25)' }}
-                                        whileTap={{ scale: 0.98 }}
-                                    >
-                                        <span className="relative z-10 text-black">
-                                            {buildStatus === "compiling" ? "Compiling..." :
-                                             buildStatus === "verifying" ? "Verifying..." :
-                                             buildStatus === "deploying" ? "Deploying..." :
-                                             !compileResult?.success ? "Compile" :
-                                             !verifyResult?.verified ? "Verify" : "Deploy"}
-                                        </span>
-                                        {/* Shimmer effect when active */}
-                                        {(buildStatus === "compiling" || buildStatus === "verifying" || buildStatus === "deploying") && (
-                                            <motion.div
-                                                className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent"
-                                                animate={{ x: ['-100%', '100%'] }}
-                                                transition={{ repeat: Infinity, duration: 1.2, ease: "linear" }}
-                                            />
-                                        )}
-                                    </motion.button>
-
-                                    {/* Secondary actions - subtle links */}
-                                    <div className="flex items-center justify-center gap-4">
-                                        <button
-                                            onClick={() => compile()}
-                                            disabled={buildStatus === "compiling"}
-                                            className="text-[11px] text-[#505050] hover:text-[#FFC800] transition-colors disabled:opacity-30"
-                                        >
-                                            Recompile
-                                        </button>
-                                        <span className="text-[#222]">·</span>
-                                        <button
-                                            onClick={() => verify()}
-                                            disabled={!compileResult?.hash || buildStatus === "verifying"}
-                                            className="text-[11px] text-[#505050] hover:text-[#FFC800] transition-colors disabled:opacity-30"
-                                        >
-                                            Reverify
-                                        </button>
-                                    </div>
-
-                                    {/* Compile Output - more subtle */}
-                                    {compileResult?.success && (
-                                        <motion.div
-                                            initial={{ opacity: 0 }}
-                                            animate={{ opacity: 1 }}
-                                            className="p-3 rounded-lg bg-[#0a0a0a] border border-[#1a1a1a] space-y-2"
-                                        >
-                                            <div className="flex justify-between text-[12px]">
-                                                <span className="text-[#505050]">WASM</span>
-                                                <span className="text-[#707070] font-mono">{compileResult.size} bytes</span>
-                                            </div>
-                                            <div className="flex justify-between text-[12px] items-center">
-                                                <span className="text-[#505050]">Hash</span>
-                                                <span className="text-[#FFC800]/70 font-mono text-[10px]">{compileResult.hash?.slice(0, 12)}...</span>
-                                            </div>
-                                        </motion.div>
-                                    )}
-                                </motion.div>
-                            )}
-                        </AnimatePresence>
                     </div>
-                )}
+
+                    {/* 3. Output / Results */}
+                    <AnimatePresence>
+                        {compileResult?.success && (
+                            <motion.div
+                                initial={{ opacity: 0, height: 0 }}
+                                animate={{ opacity: 1, height: 'auto' }}
+                                className="space-y-2 overflow-hidden"
+                            >
+                                <div className="text-[11px] text-[#505050] font-medium uppercase tracking-wider">Artifacts</div>
+                                <div className="p-3 rounded-lg bg-[#0a0a0a] border border-[#1a1a1a] space-y-2">
+                                    <div className="flex justify-between items-center text-[11px]">
+                                        <span className="text-[#606060]">Size</span>
+                                        <span className="text-[#a0a0a0] font-mono">{compileResult.size} bytes</span>
+                                    </div>
+                                    <div className="flex justify-between items-center text-[11px]">
+                                        <span className="text-[#606060]">Hash</span>
+                                        <span className="text-[#FFC800] font-mono opacity-80">{compileResult.hash?.slice(0, 10)}...</span>
+                                    </div>
+                                </div>
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
+
+                    {/* Deployed Contract */}
+                    {deployResult?.success && (
+                        <motion.div
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            className="p-3 rounded-lg bg-[#22C55E]/5 border border-[#22C55E]/20 space-y-2"
+                        >
+                            <div className="flex items-center gap-2 text-[#22C55E] text-[11px] font-bold uppercase tracking-wider">
+                                <div className="w-1.5 h-1.5 rounded-full bg-[#22C55E]" />
+                                Deployment Successful
+                            </div>
+                            <div className="text-[12px] text-[#22C55E] font-mono break-all">
+                                {deployResult.contractId}
+                            </div>
+                            {deployResult.explorerUrl && (
+                                <a
+                                    href={deployResult.explorerUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="flex items-center gap-1 text-[11px] text-[#22C55E]/70 hover:text-[#22C55E] hover:underline"
+                                >
+                                    <ExternalLinkIcon size={10} />
+                                    View in Explorer
+                                </a>
+                            )}
+                        </motion.div>
+                    )}
+
+                </div>
             </div>
 
             {/* Context Menu */}

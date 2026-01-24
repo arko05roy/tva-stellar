@@ -5,7 +5,6 @@ import { motion } from "framer-motion";
 import Sidebar from "../../components/ide/Sidebar";
 import CodeEditor from "../../components/ide/Editor";
 import Terminal from "../../components/ide/Terminal";
-import ActivityBar from "../../components/ide/ActivityBar";
 import StatusBar from "../../components/ide/StatusBar";
 import { ProjectProvider } from "../../components/ide/useProjectState";
 import dynamic from "next/dynamic";
@@ -64,7 +63,6 @@ function ResizeHandle({ orientation = "vertical" }: { orientation?: "vertical" |
 }
 
 export default function PlaygroundPage() {
-    const [activeSideView, setActiveSideView] = useState("explorer");
     const [terminalHeight, setTerminalHeight] = useState(200);
 
     return (
@@ -94,11 +92,9 @@ export default function PlaygroundPage() {
 
                 {/* Main Workspace Area */}
                 <div className="flex-1 flex flex-row overflow-hidden relative z-10">
-                    {/* Activity Bar (Far Left) */}
-                    <ActivityBar activeTab={activeSideView} setActiveTab={setActiveSideView} />
 
-                    {/* Side Panel */}
-                    <Sidebar activeView={activeSideView as any} />
+                    {/* Side Panel (Now includes Files & Wallet/Build) */}
+                    <Sidebar />
 
                     {/* Resize Handle */}
                     <ResizeHandle orientation="vertical" />
