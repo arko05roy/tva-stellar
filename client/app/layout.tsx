@@ -1,6 +1,12 @@
 import type { Metadata } from "next";
-import { IBM_Plex_Mono, Outfit } from "next/font/google";
+import { IBM_Plex_Mono, Outfit, Cinzel } from "next/font/google";
 import "./globals.css";
+
+const cinzel = Cinzel({
+  variable: "--font-cinzel",
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
+});
 
 const outfit = Outfit({
   variable: "--font-outfit",
@@ -25,9 +31,9 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" className="dark">
       <body
-        className={`${outfit.variable} ${ibmPlexMono.variable} antialiased`}
+        className={`${cinzel.variable} ${outfit.variable} ${ibmPlexMono.variable} antialiased bg-black text-white`}
       >
         {children}
       </body>
