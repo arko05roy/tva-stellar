@@ -342,10 +342,10 @@ export default function Sidebar({ activeView }: SidebarProps) {
     // ─── PIPELINE STATUS ──────────────────────────────────────────────────────
 
     const PipelineStep = ({ label, status, step }: { label: string; status: "idle" | "active" | "done" | "error"; step: number }) => {
-        const colors = { idle: "#3a3a3a", active: "#FFC800", done: "#22C55E", error: "#EF4444" };
+        const colors = { idle: "#2a2a2a", active: "#FFC800", done: "#22C55E", error: "#EF4444" };
         return (
-            <div className="flex items-center gap-3">
-                <div className="relative flex items-center justify-center w-7 h-7">
+            <div className="flex flex-col items-center gap-1.5">
+                <div className="relative flex items-center justify-center w-6 h-6">
                     {status === "active" ? (
                         <motion.div
                             className="w-full h-full rounded-full border-2"
@@ -354,15 +354,20 @@ export default function Sidebar({ activeView }: SidebarProps) {
                             transition={{ repeat: Infinity, duration: 0.8, ease: "linear" }}
                         />
                     ) : (
-                        <div className="w-full h-full rounded-full border-2 flex items-center justify-center"
-                            style={{ borderColor: colors[status] }}>
-                            {status === "done" && <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={colors.done} strokeWidth="3"><path d="M5 12l5 5L20 7" /></svg>}
-                            {status === "error" && <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={colors.error} strokeWidth="3"><path d="M18 6L6 18M6 6l12 12" /></svg>}
-                            {status === "idle" && <span className="text-[11px] text-[#3a3a3a] font-bold">{step}</span>}
+                        <div
+                            className="w-full h-full rounded-full flex items-center justify-center transition-colors"
+                            style={{
+                                backgroundColor: status === "done" ? colors.done + "15" : status === "error" ? colors.error + "15" : colors.idle,
+                                border: `1.5px solid ${colors[status]}`
+                            }}
+                        >
+                            {status === "done" && <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={colors.done} strokeWidth="3"><path d="M5 12l5 5L20 7" /></svg>}
+                            {status === "error" && <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke={colors.error} strokeWidth="3"><path d="M18 6L6 18M6 6l12 12" /></svg>}
+                            {status === "idle" && <span className="text-[9px] text-[#404040] font-bold">{step}</span>}
                         </div>
                     )}
                 </div>
-                <span className={`text-[14px] font-medium ${status === "active" ? "text-[#FFC800]" : status === "done" ? "text-[#22C55E]" : status === "error" ? "text-[#EF4444]" : "text-[#555]"}`}>
+                <span className={`text-[10px] font-medium ${status === "active" ? "text-[#FFC800]" : status === "done" ? "text-[#22C55E]" : status === "error" ? "text-[#EF4444]" : "text-[#404040]"}`}>
                     {label}
                 </span>
             </div>
@@ -611,29 +616,27 @@ export default function Sidebar({ activeView }: SidebarProps) {
 
             {/* Content */}
             <div className="flex-1 overflow-y-auto relative z-10">
-                {/* Files Section */}
-                <div className="border-b border-[#111]">
-                    <div className="px-5 py-3 flex items-center justify-between">
-                        <span className="text-[11px] text-[#404040] uppercase tracking-[0.2em] font-semibold">Files</span>
-                    </div>
-                    <div
-                        className="pb-3"
-                        onContextMenu={(e) => {
-                            if (e.target === e.currentTarget) {
-                                e.preventDefault();
-                                setContextMenu({
-                                    x: e.clientX, y: e.clientY, onClose: () => setContextMenu(null),
-                                    items: [
-                                        { label: "New File", action: () => setCreatingFile("root") },
-                                        { label: "New Folder", action: () => setCreatingFolder("root") },
-                                    ]
-                                });
-                            }
-                        }}
-                    >
-                        <RenderFolder folder={project.root} depth={0} />
-                    </div>
+                {/* File Tree - directly rendered */}
+                <div
+                    className="py-3"
+                    onContextMenu={(e) => {
+                        if (e.target === e.currentTarget) {
+                            e.preventDefault();
+                            setContextMenu({
+                                x: e.clientX, y: e.clientY, onClose: () => setContextMenu(null),
+                                items: [
+                                    { label: "New File", action: () => setCreatingFile("root") },
+                                    { label: "New Folder", action: () => setCreatingFolder("root") },
+                                ]
+                            });
+                        }
+                    }}
+                >
+                    <RenderFolder folder={project.root} depth={0} />
                 </div>
+
+                {/* Divider */}
+                <div className="mx-5 h-[1px] bg-gradient-to-r from-transparent via-[#222] to-transparent" />
 
                 {/* Build Section */}
                 {(activeView === "explorer" || activeView === "git") && (
@@ -641,10 +644,17 @@ export default function Sidebar({ activeView }: SidebarProps) {
                         {/* Build Header */}
                         <motion.button
                             onClick={() => setBuildExpanded(!buildExpanded)}
-                            className="flex items-center gap-2 w-full text-left"
+                            className="flex items-center gap-3 w-full text-left group"
                         >
                             <ChevronIcon open={buildExpanded} />
-                            <span className="text-[11px] text-[#404040] uppercase tracking-[0.2em] font-semibold">Build & Deploy</span>
+                            <span className="text-[12px] text-[#505050] group-hover:text-[#707070] uppercase tracking-[0.15em] font-semibold transition-colors">
+                                Build & Deploy
+                            </span>
+                            {/* Network status dot inline */}
+                            <div className="ml-auto flex items-center gap-2">
+                                <div className="w-2 h-2 rounded-full bg-[#22C55E] shadow-[0_0_6px_#22C55E]" />
+                                <span className="text-[10px] text-[#404040] font-mono">testnet</span>
+                            </div>
                         </motion.button>
 
                         <AnimatePresence>
@@ -656,69 +666,81 @@ export default function Sidebar({ activeView }: SidebarProps) {
                                     transition={{ duration: 0.2 }}
                                     className="space-y-4 overflow-hidden"
                                 >
-                                    {/* Network indicator */}
-                                    <div className="flex items-center gap-3 px-4 py-3 bg-[#080808] rounded-xl border border-[#1a1a1a]">
-                                        <div className="w-2.5 h-2.5 rounded-full bg-[#22C55E] shadow-[0_0_6px_#22C55E]" />
-                                        <span className="text-[13px] text-[#707070] font-medium">Stellar Testnet</span>
-                                    </div>
-
-                                    {/* Pipeline */}
-                                    <div className="p-4 bg-[#080808] rounded-xl border border-[#1a1a1a] space-y-3">
+                                    {/* Pipeline - more compact */}
+                                    <div className="flex items-center justify-between px-1">
                                         <PipelineStep label="Compile" status={getStepStatus("compile")} step={1} />
-                                        <div className="ml-3 w-[2px] h-3 bg-[#1a1a1a]" />
+                                        <div className="w-6 h-[1px] bg-[#222]" />
                                         <PipelineStep label="Verify" status={getStepStatus("verify")} step={2} />
-                                        <div className="ml-3 w-[2px] h-3 bg-[#1a1a1a]" />
+                                        <div className="w-6 h-[1px] bg-[#222]" />
                                         <PipelineStep label="Deploy" status={getStepStatus("deploy")} step={3} />
                                     </div>
 
-                                    {/* Action Buttons */}
-                                    <div className="space-y-2">
-                                        <motion.button
+                                    {/* Single action button - context aware */}
+                                    <motion.button
+                                        onClick={() => {
+                                            if (!compileResult?.success) compile();
+                                            else if (!verifyResult?.verified) verify();
+                                            else deploy();
+                                        }}
+                                        disabled={buildStatus === "compiling" || buildStatus === "verifying" || buildStatus === "deploying"}
+                                        className="w-full h-11 text-[13px] font-semibold rounded-lg relative overflow-hidden disabled:cursor-not-allowed group"
+                                        style={{
+                                            background: 'linear-gradient(135deg, #FFC800 0%, #E5B400 100%)',
+                                            boxShadow: '0 0 20px rgba(255, 200, 0, 0.15)'
+                                        }}
+                                        whileHover={{ boxShadow: '0 0 30px rgba(255, 200, 0, 0.25)' }}
+                                        whileTap={{ scale: 0.98 }}
+                                    >
+                                        <span className="relative z-10 text-black">
+                                            {buildStatus === "compiling" ? "Compiling..." :
+                                             buildStatus === "verifying" ? "Verifying..." :
+                                             buildStatus === "deploying" ? "Deploying..." :
+                                             !compileResult?.success ? "Compile" :
+                                             !verifyResult?.verified ? "Verify" : "Deploy"}
+                                        </span>
+                                        {/* Shimmer effect when active */}
+                                        {(buildStatus === "compiling" || buildStatus === "verifying" || buildStatus === "deploying") && (
+                                            <motion.div
+                                                className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent"
+                                                animate={{ x: ['-100%', '100%'] }}
+                                                transition={{ repeat: Infinity, duration: 1.2, ease: "linear" }}
+                                            />
+                                        )}
+                                    </motion.button>
+
+                                    {/* Secondary actions - subtle links */}
+                                    <div className="flex items-center justify-center gap-4">
+                                        <button
                                             onClick={() => compile()}
                                             disabled={buildStatus === "compiling"}
-                                            className="w-full h-12 text-[14px] font-bold rounded-xl bg-[#22C55E] text-black disabled:opacity-40 disabled:cursor-not-allowed"
-                                            whileHover={{ scale: 1.01 }}
-                                            whileTap={{ scale: 0.99 }}
+                                            className="text-[11px] text-[#505050] hover:text-[#FFC800] transition-colors disabled:opacity-30"
                                         >
-                                            {buildStatus === "compiling" ? "Compiling..." : "Compile"}
-                                        </motion.button>
-
-                                        <motion.button
+                                            Recompile
+                                        </button>
+                                        <span className="text-[#222]">·</span>
+                                        <button
                                             onClick={() => verify()}
-                                            disabled={buildStatus === "verifying" || !compileResult?.hash}
-                                            className="w-full h-12 text-[14px] font-bold rounded-xl bg-[#9B7FFF] text-black disabled:opacity-25 disabled:cursor-not-allowed"
-                                            whileHover={{ scale: 1.01 }}
-                                            whileTap={{ scale: 0.99 }}
+                                            disabled={!compileResult?.hash || buildStatus === "verifying"}
+                                            className="text-[11px] text-[#505050] hover:text-[#FFC800] transition-colors disabled:opacity-30"
                                         >
-                                            {buildStatus === "verifying" ? "Verifying..." : "Verify"}
-                                        </motion.button>
-
-                                        <motion.button
-                                            onClick={() => deploy()}
-                                            disabled={buildStatus === "deploying" || !compileResult?.wasm}
-                                            className="w-full h-12 text-[14px] font-bold rounded-xl bg-[#3B82F6] text-white disabled:opacity-25 disabled:cursor-not-allowed"
-                                            whileHover={{ scale: 1.01 }}
-                                            whileTap={{ scale: 0.99 }}
-                                        >
-                                            {buildStatus === "deploying" ? "Deploying..." : "Deploy"}
-                                        </motion.button>
+                                            Reverify
+                                        </button>
                                     </div>
 
-                                    {/* Compile Output */}
+                                    {/* Compile Output - more subtle */}
                                     {compileResult?.success && (
                                         <motion.div
-                                            initial={{ opacity: 0, y: 4 }}
-                                            animate={{ opacity: 1, y: 0 }}
-                                            className="p-4 bg-[#080808] rounded-xl border border-[#22C55E]/20 space-y-2"
+                                            initial={{ opacity: 0 }}
+                                            animate={{ opacity: 1 }}
+                                            className="p-3 rounded-lg bg-[#0a0a0a] border border-[#1a1a1a] space-y-2"
                                         >
-                                            <div className="text-[11px] text-[#404040] uppercase tracking-wider font-semibold">Artifact</div>
-                                            <div className="flex justify-between text-[13px]">
-                                                <span className="text-[#606060]">WASM</span>
-                                                <span className="text-white font-mono">{compileResult.size} B</span>
+                                            <div className="flex justify-between text-[12px]">
+                                                <span className="text-[#505050]">WASM</span>
+                                                <span className="text-[#707070] font-mono">{compileResult.size} bytes</span>
                                             </div>
-                                            <div className="flex justify-between text-[13px] items-center">
-                                                <span className="text-[#606060]">Hash</span>
-                                                <span className="text-[#FFC800] font-mono text-[11px]">{compileResult.hash?.slice(0, 16)}...</span>
+                                            <div className="flex justify-between text-[12px] items-center">
+                                                <span className="text-[#505050]">Hash</span>
+                                                <span className="text-[#FFC800]/70 font-mono text-[10px]">{compileResult.hash?.slice(0, 12)}...</span>
                                             </div>
                                         </motion.div>
                                     )}
