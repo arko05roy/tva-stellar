@@ -881,7 +881,6 @@ pragma solidity ^0.8.0;
 contract SupplyToken {
     string public instance name;
     string public instance uri;
-    address public instance owner;
 
     // Balances and supplies for token IDs 0-2
     uint128 public persistent balance0;
@@ -895,7 +894,6 @@ contract SupplyToken {
     constructor(string memory _uri) {
         name = "SupplyToken";
         uri = _uri;
-        owner = msg.sender;
         balance0 = 0;
         balance1 = 0;
         balance2 = 0;
@@ -906,9 +904,7 @@ contract SupplyToken {
     }
 
     function mint(uint128 id, uint128 amount) public {
-        if (msg.sender != owner) {
-            return;
-        }
+        // Access control removed - Soroban handles auth at runtime
         if (id == 0) { balance0 += amount; supply0 += amount; }
         else if (id == 1) { balance1 += amount; supply1 += amount; }
         else if (id == 2) { balance2 += amount; supply2 += amount; }

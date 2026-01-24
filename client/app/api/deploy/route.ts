@@ -158,6 +158,17 @@ export async function POST(request: NextRequest): Promise<NextResponse<DeployRes
       const err = deployError as { message?: string; stderr?: string; stdout?: string };
       const errorOutput = `${err.message || ''}\n${err.stderr || ''}`;
 
+      // Check for WASM validation errors (compiler issues)
+      if (errorOutput.includes('type mismatch') || errorOutput.includes('InvalidAction') || errorOutput.includes('WasmVm')) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: `WASM validation failed: The compiled contract has type mismatches. This is a compiler issue. Try:\n1. Rebuild Solang compiler with latest fixes\n2. Simplify the contract (remove msg.sender checks if possible)\n3. Check contract uses correct types (addresses should be i64, not i32)\n\nOriginal error: ${errorOutput.split('\n').find(l => l.includes('type mismatch') || l.includes('InvalidAction')) || 'WASM validation failed'}`,
+          },
+          { status: 500 }
+        );
+      }
+
       // Check if the error is about unexpected constructor arguments
       const unexpectedArgPattern = /unexpected argument '?--([^'"\s]+)'? found/g;
       const unexpectedArgs: string[] = [];
