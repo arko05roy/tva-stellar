@@ -8,6 +8,15 @@ export const TVA_CHAIN_ID = 1414676736;
 // Stellar testnet explorer base URL
 export const STELLAR_EXPERT_BASE = "https://stellar.expert/explorer/testnet";
 
+// Blockscout API URL
+// Set NEXT_PUBLIC_BLOCKSCOUT_API_URL to enable Blockscout integration
+// Examples:
+// - https://eth.blockscout.com (Ethereum Mainnet)
+// - https://base.blockscout.com (Base)
+// - https://optimism.blockscout.com (Optimism)
+// - Your custom Blockscout instance URL
+export const BLOCKSCOUT_API_URL = process.env.NEXT_PUBLIC_BLOCKSCOUT_API_URL || "";
+
 // Polling intervals
 export const BLOCK_POLL_INTERVAL = 5000; // 5 seconds - Stellar block time
 
@@ -29,3 +38,8 @@ export const SOROBAN_CONTRACT_PREFIX = "C";
 // RPC URL - use Next.js API proxy to avoid CORS issues
 // The proxy forwards to the Rust RPC server configured via TVA_RPC_URL env var
 export const DEFAULT_RPC_URL = process.env.NEXT_PUBLIC_TVA_RPC_URL || "/api/rpc";
+
+// Data source preference
+// When Blockscout is configured, it will be used as the primary data source
+// Set to "rpc" to always use the TVA RPC, "blockscout" for Blockscout, or "auto" for automatic
+export const DATA_SOURCE = process.env.NEXT_PUBLIC_DATA_SOURCE || "auto";

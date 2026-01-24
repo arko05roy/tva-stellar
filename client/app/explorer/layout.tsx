@@ -22,7 +22,7 @@ export default function ExplorerLayout({
 
   return (
     <QueryClientProvider client={queryClient}>
-      <div className="min-h-screen bg-white">
+      <div className="min-h-screen bg-black">
         {children}
       </div>
     </QueryClientProvider>

@@ -5,6 +5,7 @@ interface PaginationProps {
   totalPages: number;
   onPageChange: (page: number) => void;
   className?: string;
+  darkMode?: boolean;
 }
 
 export function Pagination({
@@ -12,6 +13,7 @@ export function Pagination({
   totalPages,
   onPageChange,
   className = "",
+  darkMode = false,
 }: PaginationProps) {
   const canGoPrev = currentPage > 1;
   const canGoNext = currentPage < totalPages;
@@ -48,6 +50,77 @@ export function Pagination({
   };
 
   if (totalPages <= 1) return null;
+
+  if (darkMode) {
+    return (
+      <div className={`flex items-center justify-center gap-2 ${className}`}>
+        {/* Previous */}
+        <button
+          onClick={() => canGoPrev && onPageChange(currentPage - 1)}
+          disabled={!canGoPrev}
+          className={`px-3 py-2 rounded-lg border transition-colors ${
+            canGoPrev
+              ? "border-white/10 hover:border-white/20 hover:bg-white/5 text-white"
+              : "border-white/5 text-white/30 cursor-not-allowed"
+          }`}
+        >
+          <svg
+            className="w-5 h-5"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            strokeWidth={2}
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+          </svg>
+        </button>
+
+        {/* Page Numbers */}
+        <div className="flex items-center gap-1">
+          {getPageNumbers().map((page, i) =>
+            page === "..." ? (
+              <span key={`ellipsis-${i}`} className="px-3 py-2 text-[#B0B0B0]">
+                ...
+              </span>
+            ) : (
+              <button
+                key={page}
+                onClick={() => onPageChange(page as number)}
+                className={`px-3 py-2 rounded-lg transition-colors min-w-[40px] ${
+                  currentPage === page
+                    ? "bg-[#FFC800] text-black font-medium"
+                    : "hover:bg-white/5 text-white"
+                }`}
+              >
+                {page}
+              </button>
+            )
+          )}
+        </div>
+
+        {/* Next */}
+        <button
+          onClick={() => canGoNext && onPageChange(currentPage + 1)}
+          disabled={!canGoNext}
+          className={`px-3 py-2 rounded-lg border transition-colors ${
+            canGoNext
+              ? "border-white/10 hover:border-white/20 hover:bg-white/5 text-white"
+              : "border-white/5 text-white/30 cursor-not-allowed"
+          }`}
+        >
+          <svg
+            className="w-5 h-5"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            strokeWidth={2}
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+          </svg>
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className={`flex items-center justify-center gap-2 ${className}`}>
@@ -128,13 +201,62 @@ export function SimplePagination({
   onPrev,
   onNext,
   className = "",
+  darkMode = false,
 }: {
   hasPrev: boolean;
   hasNext: boolean;
   onPrev: () => void;
   onNext: () => void;
   className?: string;
+  darkMode?: boolean;
 }) {
+  if (darkMode) {
+    return (
+      <div className={`flex items-center gap-4 ${className}`}>
+        <button
+          onClick={onPrev}
+          disabled={!hasPrev}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg border transition-colors ${
+            hasPrev
+              ? "border-white/10 hover:border-white/20 hover:bg-white/5 text-white"
+              : "border-white/5 text-white/30 cursor-not-allowed"
+          }`}
+        >
+          <svg
+            className="w-4 h-4"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            strokeWidth={2}
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+          </svg>
+          Previous
+        </button>
+        <button
+          onClick={onNext}
+          disabled={!hasNext}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg border transition-colors ${
+            hasNext
+              ? "border-white/10 hover:border-white/20 hover:bg-white/5 text-white"
+              : "border-white/5 text-white/30 cursor-not-allowed"
+          }`}
+        >
+          Next
+          <svg
+            className="w-4 h-4"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            strokeWidth={2}
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+          </svg>
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className={`flex items-center gap-4 ${className}`}>
       <button
