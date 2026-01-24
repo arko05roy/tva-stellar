@@ -332,6 +332,7 @@ interface ProjectContextType {
     // Contract Interaction
     callContractFunction: (functionName: string, args: Record<string, string>, isView: boolean) => Promise<FunctionCallResult>;
     getContractFunctions: () => ABIFunction[];
+    resetDeployment: () => void;
 }
 
 const ProjectContext = createContext<ProjectContextType | undefined>(undefined);
@@ -806,6 +807,14 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         }
     }, [deployResult, addLog]);
 
+    const resetDeployment = useCallback(() => {
+        setBuildStatus("idle");
+        setCompileResult(null);
+        setVerifyResult(null);
+        setDeployResult(null);
+        addLog({ type: "system", msg: "Ready for new deployment." });
+    }, [addLog]);
+
     // --- Context ---
 
     const contextValue: ProjectContextType = {
@@ -837,6 +846,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         disconnectWallet,
         callContractFunction,
         getContractFunctions,
+        resetDeployment,
     };
 
     return (

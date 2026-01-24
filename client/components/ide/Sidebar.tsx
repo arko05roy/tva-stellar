@@ -408,7 +408,7 @@ export default function Sidebar() {
         buildStatus, compileResult, verifyResult, deployResult,
         compile, verify, deploy,
         walletAddress, walletBalance, isWalletConnected, connectWallet, disconnectWallet,
-        callContractFunction, getContractFunctions,
+        callContractFunction, getContractFunctions, resetDeployment,
     } = useProject();
 
     const contractFunctions = getContractFunctions();
@@ -792,179 +792,206 @@ export default function Sidebar() {
                 <div className="absolute inset-x-0 -top-1 -bottom-1 cursor-row-resize z-30" />
             </div>
 
-            {/* ─── BOTTOM SECTION: WALLET & DEPLOY ───────────────────────────── */}
+            {/* ─── BOTTOM SECTION: CONTEXT-AWARE PANEL ───────────────────────── */}
             <div className="flex flex-col min-h-0 bg-[#020202] z-10" style={{ height: bottomPanelHeight }}>
-                {/* Header */}
+                {/* Header - changes based on deployment state */}
                 <div className="relative h-10 flex items-center px-4 border-b border-[#151515] shrink-0 bg-[#050505]">
-                    <span className="text-[11px] font-semibold text-[#606060] uppercase tracking-[0.15em]">
-                        Blockchain & Deploy
-                    </span>
-                    {/* Connection Status Dot */}
-                    <div className={`ml-auto w-2 h-2 rounded-full ${isWalletConnected ? 'bg-[#22C55E] shadow-[0_0_8px_#22C55E]' : 'bg-[#333]'}`} />
+                    {deployResult?.success ? (
+                        <>
+                            <div className="flex items-center gap-2">
+                                <div className="w-2 h-2 rounded-full bg-[#22C55E] animate-pulse" />
+                                <span className="text-[11px] font-semibold text-[#22C55E] uppercase tracking-[0.1em]">
+                                    Live Contract
+                                </span>
+                            </div>
+                            <motion.button
+                                onClick={resetDeployment}
+                                className="ml-auto text-[10px] text-[#505050] hover:text-[#FFC800] transition-colors flex items-center gap-1"
+                                whileHover={{ scale: 1.05 }}
+                                whileTap={{ scale: 0.95 }}
+                                title="Deploy a new contract"
+                            >
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                    <path d="M12 5v14M5 12h14" />
+                                </svg>
+                                <span className="text-[9px]">New</span>
+                            </motion.button>
+                        </>
+                    ) : (
+                        <>
+                            <span className="text-[11px] font-semibold text-[#606060] uppercase tracking-[0.15em]">
+                                Deploy
+                            </span>
+                            <div className={`ml-auto w-2 h-2 rounded-full ${isWalletConnected ? 'bg-[#22C55E] shadow-[0_0_8px_#22C55E]' : 'bg-[#333]'}`} />
+                        </>
+                    )}
                 </div>
 
-                <div className="flex-1 overflow-y-auto p-4 space-y-6">
-
-                    {/* 1. Wallet Connection */}
-                    <div className="space-y-3">
-                        {isWalletConnected ? (
-                            <div className="p-3 rounded-lg bg-[#0a0a0a] border border-[#1a1a1a] space-y-3">
+                <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                    {/* ═══ POST-DEPLOYMENT: INTERACTION VIEW ═══ */}
+                    {deployResult?.success ? (
+                        <>
+                            {/* Contract Info Card */}
+                            <div className="p-3 rounded-lg bg-[#0a0a0a] border border-[#1a1a1a] space-y-2">
                                 <div className="flex items-center justify-between">
-                                    <span className="text-[11px] text-[#505050] font-medium uppercase tracking-wider">Account</span>
-                                    <motion.button onClick={disconnectWallet} className="text-[10px] text-[#EF4444] hover:underline">Disconnect</motion.button>
+                                    <span className="text-[10px] text-[#505050] uppercase tracking-wider">Contract ID</span>
+                                    <motion.button
+                                        onClick={() => handleCopy(deployResult.contractId || "")}
+                                        className="p-1 hover:text-[#FFC800] text-[#505050]"
+                                    >
+                                        <CopyIcon size={10} />
+                                    </motion.button>
                                 </div>
-                                <div className="flex items-center gap-2">
-                                    <span className="text-[12px] font-mono text-[#808080] truncate flex-1">{walletAddress}</span>
-                                    <motion.button onClick={() => handleCopy(walletAddress || "")} className="p-1 hover:text-[#FFC800] text-[#505050]"><CopyIcon size={12} /></motion.button>
+                                <div className="text-[11px] text-[#808080] font-mono break-all">
+                                    {deployResult.contractId}
                                 </div>
-                                <div className="pt-2 border-t border-[#151515] flex justify-between items-end">
-                                    <span className="text-[10px] text-[#505050]">Balance</span>
-                                    <span className="text-[14px] text-[#FFC800] font-mono">{walletBalance} <span className="text-[#505050] text-[10px]">XLM</span></span>
-                                </div>
+                                {deployResult.explorerUrl && (
+                                    <a
+                                        href={deployResult.explorerUrl}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="flex items-center gap-1 text-[10px] text-[#FFC800]/70 hover:text-[#FFC800] transition-colors"
+                                    >
+                                        <ExternalLinkIcon size={10} />
+                                        View on Explorer
+                                    </a>
+                                )}
                             </div>
-                        ) : (
-                            <motion.button
-                                onClick={connectWallet}
-                                className="w-full py-3 px-4 rounded-lg bg-[#FFC800]/10 border border-[#FFC800]/20 hover:bg-[#FFC800]/20 hover:border-[#FFC800]/40 transition-all flex items-center justify-center gap-2 group"
-                                whileTap={{ scale: 0.98 }}
-                            >
-                                <div className="w-2 h-2 rounded-full bg-[#FFC800] group-hover:shadow-[0_0_8px_#FFC800]" />
-                                <span className="text-[12px] font-semibold text-[#FFC800]">Connect Wallet</span>
-                            </motion.button>
-                        )}
-                    </div>
 
-                    {/* 2. Build Pipeline */}
-                    <div className="space-y-3">
-                        <div className="text-[11px] text-[#505050] font-medium uppercase tracking-wider">Build Pipeline</div>
-
-                        {/* Steps Visualization */}
-                        <div className="flex items-center justify-between px-2 py-2">
-                            <PipelineStep label="Compile" status={getStepStatus("compile")} step={1} />
-                            <div className="w-4 h-[1px] bg-[#222] mt-[-10px]" />
-                            <PipelineStep label="Verify" status={getStepStatus("verify")} step={2} />
-                            <div className="w-4 h-[1px] bg-[#222] mt-[-10px]" />
-                            <PipelineStep label="Deploy" status={getStepStatus("deploy")} step={3} />
-                        </div>
-
-                        {/* Action Button */}
-                        <motion.button
-                            onClick={() => {
-                                if (!compileResult?.success) compile();
-                                else if (!verifyResult?.verified) verify();
-                                else deploy();
-                            }}
-                            disabled={buildStatus === "compiling" || buildStatus === "verifying" || buildStatus === "deploying"}
-                            className="w-full h-10 text-[12px] font-bold text-black bg-[#FFC800] rounded-md shadow-lg shadow-[#FFC800]/10 hover:shadow-[#FFC800]/20 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 relative overflow-hidden"
-                            whileHover={{ scale: 1.01 }}
-                            whileTap={{ scale: 0.98 }}
-                        >
-                            {/* Loading spinner */}
-                            {(buildStatus === "compiling" || buildStatus === "verifying" || buildStatus === "deploying") && (
-                                <motion.div
-                                    className="w-3 h-3 border-2 border-black/30 border-t-black rounded-full"
-                                    animate={{ rotate: 360 }}
-                                    transition={{ repeat: Infinity, duration: 1, ease: 'linear' }}
-                                />
-                            )}
-                            <span className="relative z-10">
-                                {buildStatus === "compiling" ? "Compiling..." :
-                                    buildStatus === "verifying" ? "Verifying..." :
-                                        buildStatus === "deploying" ? "Deploying..." :
-                                            !compileResult?.success ? "Compile Contract" :
-                                                !verifyResult?.verified ? "Verify & Build" : "Deploy to Testnet"}
-                            </span>
-                        </motion.button>
-
-                    </div>
-
-                    {/* 3. Output / Results */}
-                    <AnimatePresence>
-                        {compileResult?.success && (
-                            <motion.div
-                                initial={{ opacity: 0, height: 0 }}
-                                animate={{ opacity: 1, height: 'auto' }}
-                                className="space-y-2 overflow-hidden"
-                            >
-                                <div className="text-[11px] text-[#505050] font-medium uppercase tracking-wider">Artifacts</div>
-                                <div className="p-3 rounded-lg bg-[#0a0a0a] border border-[#1a1a1a] space-y-2">
-                                    <div className="flex justify-between items-center text-[11px]">
-                                        <span className="text-[#606060]">Size</span>
-                                        <span className="text-[#a0a0a0] font-mono">{compileResult.size} bytes</span>
-                                    </div>
-                                    <div className="flex justify-between items-center text-[11px]">
-                                        <span className="text-[#606060]">Hash</span>
-                                        <span className="text-[#FFC800] font-mono opacity-80">{compileResult.hash?.slice(0, 10)}...</span>
-                                    </div>
-                                </div>
-                            </motion.div>
-                        )}
-                    </AnimatePresence>
-
-                    {/* Deployed Contract */}
-                    {deployResult?.success && (
-                        <motion.div
-                            initial={{ opacity: 0, y: 10 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            className="p-3 rounded-lg bg-[#22C55E]/5 border border-[#22C55E]/20 space-y-2"
-                        >
-                            <div className="flex items-center gap-2 text-[#22C55E] text-[11px] font-bold uppercase tracking-wider">
-                                <div className="w-1.5 h-1.5 rounded-full bg-[#22C55E] animate-pulse" />
-                                Deployed
-                            </div>
-                            <div className="text-[11px] text-[#22C55E] font-mono break-all opacity-80">
-                                {deployResult.contractId}
-                            </div>
-                            {deployResult.explorerUrl && (
-                                <a
-                                    href={deployResult.explorerUrl}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="flex items-center gap-1 text-[10px] text-[#22C55E]/70 hover:text-[#22C55E] hover:underline"
-                                >
-                                    <ExternalLinkIcon size={10} />
-                                    View in Explorer
-                                </a>
-                            )}
-                        </motion.div>
-                    )}
-
-                    {/* Contract Interaction */}
-                    {deployResult?.success && contractFunctions.length > 0 && (
-                        <motion.div
-                            initial={{ opacity: 0, y: 10 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ delay: 0.1 }}
-                            className="space-y-3"
-                        >
+                            {/* Functions Legend */}
                             <div className="flex items-center justify-between">
                                 <div className="text-[11px] text-[#505050] font-medium uppercase tracking-wider">
-                                    Interact
+                                    Functions
                                 </div>
-                                <div className="flex items-center gap-2 text-[9px]">
-                                    <span className="flex items-center gap-1 text-[#3B82F6]">
+                                <div className="flex items-center gap-3 text-[9px]">
+                                    <span className="flex items-center gap-1.5 text-[#3B82F6]">
                                         <div className="w-1.5 h-1.5 rounded-full bg-[#3B82F6]" />
                                         Read
                                     </span>
-                                    <span className="flex items-center gap-1 text-[#F59E0B]">
+                                    <span className="flex items-center gap-1.5 text-[#F59E0B]">
                                         <div className="w-1.5 h-1.5 rounded-full bg-[#F59E0B]" />
                                         Write
                                     </span>
                                 </div>
                             </div>
 
-                            <div className="space-y-2">
-                                {contractFunctions.map((fn, idx) => (
-                                    <FunctionCard
-                                        key={`${fn.name}-${idx}`}
-                                        fn={fn}
-                                        onCall={callContractFunction}
-                                    />
-                                ))}
+                            {/* Function Cards */}
+                            {contractFunctions.length > 0 ? (
+                                <div className="space-y-2">
+                                    {contractFunctions.map((fn, idx) => (
+                                        <FunctionCard
+                                            key={`${fn.name}-${idx}`}
+                                            fn={fn}
+                                            onCall={callContractFunction}
+                                        />
+                                    ))}
+                                </div>
+                            ) : (
+                                <div className="text-center py-6 text-[12px] text-[#404040]">
+                                    No callable functions found
+                                </div>
+                            )}
+                        </>
+                    ) : (
+                        /* ═══ PRE-DEPLOYMENT: BUILD & DEPLOY VIEW ═══ */
+                        <>
+                            {/* Wallet Connection */}
+                            <div className="space-y-3">
+                                {isWalletConnected ? (
+                                    <div className="p-3 rounded-lg bg-[#0a0a0a] border border-[#1a1a1a] space-y-2">
+                                        <div className="flex items-center justify-between">
+                                            <span className="text-[10px] text-[#505050] uppercase tracking-wider">Wallet</span>
+                                            <motion.button onClick={disconnectWallet} className="text-[9px] text-[#EF4444] hover:underline">
+                                                Disconnect
+                                            </motion.button>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-[11px] font-mono text-[#707070] truncate flex-1">{walletAddress}</span>
+                                            <motion.button onClick={() => handleCopy(walletAddress || "")} className="p-1 hover:text-[#FFC800] text-[#505050]">
+                                                <CopyIcon size={10} />
+                                            </motion.button>
+                                        </div>
+                                        <div className="pt-2 border-t border-[#151515] flex justify-between items-center">
+                                            <span className="text-[9px] text-[#505050]">Balance</span>
+                                            <span className="text-[12px] text-[#FFC800] font-mono">{walletBalance} <span className="text-[#505050] text-[9px]">XLM</span></span>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <motion.button
+                                        onClick={connectWallet}
+                                        className="w-full py-2.5 px-4 rounded-lg bg-[#FFC800]/10 border border-[#FFC800]/20 hover:bg-[#FFC800]/20 hover:border-[#FFC800]/40 transition-all flex items-center justify-center gap-2 group"
+                                        whileTap={{ scale: 0.98 }}
+                                    >
+                                        <div className="w-1.5 h-1.5 rounded-full bg-[#FFC800] group-hover:shadow-[0_0_8px_#FFC800]" />
+                                        <span className="text-[11px] font-semibold text-[#FFC800]">Connect Wallet</span>
+                                    </motion.button>
+                                )}
                             </div>
-                        </motion.div>
-                    )}
 
+                            {/* Build Pipeline */}
+                            <div className="space-y-3">
+                                <div className="text-[10px] text-[#505050] font-medium uppercase tracking-wider">Pipeline</div>
+                                <div className="flex items-center justify-between px-1 py-1">
+                                    <PipelineStep label="Compile" status={getStepStatus("compile")} step={1} />
+                                    <div className="w-3 h-[1px] bg-[#222] mt-[-10px]" />
+                                    <PipelineStep label="Verify" status={getStepStatus("verify")} step={2} />
+                                    <div className="w-3 h-[1px] bg-[#222] mt-[-10px]" />
+                                    <PipelineStep label="Deploy" status={getStepStatus("deploy")} step={3} />
+                                </div>
+
+                                <motion.button
+                                    onClick={() => {
+                                        if (!compileResult?.success) compile();
+                                        else if (!verifyResult?.verified) verify();
+                                        else deploy();
+                                    }}
+                                    disabled={buildStatus === "compiling" || buildStatus === "verifying" || buildStatus === "deploying"}
+                                    className="w-full h-9 text-[11px] font-bold text-black bg-[#FFC800] rounded-md shadow-lg shadow-[#FFC800]/10 hover:shadow-[#FFC800]/20 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                                    whileHover={{ scale: 1.01 }}
+                                    whileTap={{ scale: 0.98 }}
+                                >
+                                    {(buildStatus === "compiling" || buildStatus === "verifying" || buildStatus === "deploying") && (
+                                        <motion.div
+                                            className="w-3 h-3 border-2 border-black/30 border-t-black rounded-full"
+                                            animate={{ rotate: 360 }}
+                                            transition={{ repeat: Infinity, duration: 1, ease: 'linear' }}
+                                        />
+                                    )}
+                                    <span>
+                                        {buildStatus === "compiling" ? "Compiling..." :
+                                            buildStatus === "verifying" ? "Verifying..." :
+                                                buildStatus === "deploying" ? "Deploying..." :
+                                                    !compileResult?.success ? "Compile" :
+                                                        !verifyResult?.verified ? "Verify" : "Deploy"}
+                                    </span>
+                                </motion.button>
+                            </div>
+
+                            {/* Compile Results */}
+                            <AnimatePresence>
+                                {compileResult?.success && !deployResult?.success && (
+                                    <motion.div
+                                        initial={{ opacity: 0, height: 0 }}
+                                        animate={{ opacity: 1, height: 'auto' }}
+                                        exit={{ opacity: 0, height: 0 }}
+                                        className="overflow-hidden"
+                                    >
+                                        <div className="p-2.5 rounded-lg bg-[#22C55E]/5 border border-[#22C55E]/20 space-y-1.5">
+                                            <div className="text-[10px] text-[#22C55E] font-medium uppercase tracking-wider">Compiled</div>
+                                            <div className="flex justify-between text-[10px]">
+                                                <span className="text-[#505050]">Size</span>
+                                                <span className="text-[#808080] font-mono">{compileResult.size} bytes</span>
+                                            </div>
+                                            <div className="flex justify-between text-[10px]">
+                                                <span className="text-[#505050]">Hash</span>
+                                                <span className="text-[#FFC800] font-mono">{compileResult.hash?.slice(0, 12)}...</span>
+                                            </div>
+                                        </div>
+                                    </motion.div>
+                                )}
+                            </AnimatePresence>
+                        </>
+                    )}
                 </div>
             </div>
 
