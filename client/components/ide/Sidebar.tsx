@@ -393,7 +393,170 @@ export default function Sidebar() {
         return "idle" as const;
     };
 
-    // ─── MAIN COMPONENT RENDER ────────────────────────────────────────────────
+    // ─── BLOCKCHAIN VIEW (Wallet + Explorer combined) ─────────────────────────
+
+    if (activeView === "extensions" || activeView === "debug") {
+        return (
+            <motion.div
+                className="w-[300px] flex flex-col h-full select-none relative overflow-hidden"
+                style={{ background: 'linear-gradient(180deg, #050505 0%, #000000 100%)' }}
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ duration: 0.3 }}
+            >
+                {/* Background effects */}
+                <div className="absolute inset-0 pointer-events-none">
+                    <div className="absolute -top-20 -left-20 w-48 h-48 bg-[#FFC800]/[0.03] rounded-full blur-3xl" />
+                    <div className="absolute right-0 top-0 bottom-0 w-[1px] bg-gradient-to-b from-[#FFC800]/15 via-[#1a1a1a] to-transparent" />
+                </div>
+
+                {/* Header */}
+                <div className="relative h-14 flex items-center px-5 border-b border-[#151515] shrink-0">
+                    <div className="absolute bottom-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-[#FFC800]/20 to-transparent" />
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#FFC800" strokeWidth="1.5" className="mr-3 opacity-70">
+                        <rect x="2" y="6" width="20" height="14" rx="2" />
+                        <path d="M2 10h20" />
+                        <circle cx="16" cy="14" r="2" />
+                    </svg>
+                    <span className="text-[13px] font-semibold text-[#505050] uppercase tracking-[0.15em]">
+                        Blockchain
+                    </span>
+                </div>
+
+                <div className="flex-1 overflow-y-auto p-5 space-y-5 relative z-10">
+                    {/* Wallet Section */}
+                    <div className="space-y-4">
+                        <div className="text-[11px] text-[#404040] uppercase tracking-[0.2em] font-semibold">Wallet</div>
+
+                        {isWalletConnected ? (
+                            <div className="space-y-4">
+                                {/* Status */}
+                                <div className="flex items-center gap-3">
+                                    <div className="w-3 h-3 rounded-full bg-[#22C55E] shadow-[0_0_10px_#22C55E]" />
+                                    <span className="text-[14px] text-[#22C55E] font-medium">Connected</span>
+                                </div>
+
+                                {/* Address */}
+                                <div className="p-4 rounded-xl bg-[#0a0a0a] border border-[#1a1a1a] space-y-2">
+                                    <div className="text-[11px] text-[#404040] uppercase tracking-wider font-semibold">Address</div>
+                                    <div className="flex items-center gap-3">
+                                        <span className="text-[13px] font-mono text-[#707070] truncate flex-1">
+                                            {walletAddress}
+                                        </span>
+                                        <motion.button
+                                            onClick={() => handleCopy(walletAddress || "")}
+                                            className="text-[#505050] hover:text-[#FFC800] transition-colors p-1"
+                                            whileHover={{ scale: 1.1 }}
+                                            whileTap={{ scale: 0.9 }}
+                                        >
+                                            <CopyIcon />
+                                        </motion.button>
+                                    </div>
+                                </div>
+
+                                {/* Balance */}
+                                <div className="p-4 rounded-xl bg-[#0a0a0a] border border-[#1a1a1a]">
+                                    <div className="text-[11px] text-[#404040] uppercase tracking-wider font-semibold mb-2">Balance</div>
+                                    <div className="text-[28px] font-mono text-[#FFC800] font-bold">
+                                        {walletBalance}
+                                        <span className="text-[14px] text-[#505050] ml-2">XLM</span>
+                                    </div>
+                                </div>
+
+                                {/* Network */}
+                                <div className="p-4 rounded-xl bg-[#0a0a0a] border border-[#1a1a1a]">
+                                    <div className="text-[11px] text-[#404040] uppercase tracking-wider font-semibold mb-2">Network</div>
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-2.5 h-2.5 rounded-full bg-[#22C55E]" />
+                                        <span className="text-[14px] text-[#808080]">Stellar Testnet</span>
+                                    </div>
+                                </div>
+
+                                {/* Disconnect */}
+                                <motion.button
+                                    onClick={disconnectWallet}
+                                    className="w-full h-12 text-[14px] font-semibold text-[#606060] border border-[#252525] rounded-xl hover:border-[#EF4444]/50 hover:text-[#EF4444] transition-all"
+                                    whileTap={{ scale: 0.98 }}
+                                >
+                                    Disconnect Wallet
+                                </motion.button>
+                            </div>
+                        ) : (
+                            <div className="py-8 flex flex-col items-center gap-5">
+                                <div className="w-20 h-20 rounded-2xl bg-[#FFC800]/10 border border-[#FFC800]/20 flex items-center justify-center">
+                                    <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#FFC800" strokeWidth="1.5">
+                                        <rect x="2" y="6" width="20" height="14" rx="2" />
+                                        <path d="M2 10h20" />
+                                        <circle cx="16" cy="14" r="2" />
+                                    </svg>
+                                </div>
+                                <div className="text-center space-y-2">
+                                    <div className="text-[16px] text-white font-medium">Connect Wallet</div>
+                                    <div className="text-[13px] text-[#505050] leading-relaxed max-w-[200px]">
+                                        Connect to deploy contracts on Stellar testnet
+                                    </div>
+                                </div>
+                                <motion.button
+                                    onClick={connectWallet}
+                                    className="w-full h-14 text-[15px] font-bold text-black bg-[#FFC800] rounded-xl shadow-[0_0_30px_rgba(255,200,0,0.2)]"
+                                    whileHover={{ scale: 1.02, boxShadow: '0 0 40px rgba(255, 200, 0, 0.3)' }}
+                                    whileTap={{ scale: 0.98 }}
+                                >
+                                    Connect Wallet
+                                </motion.button>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Deployed Contracts Section */}
+                    {deployResult?.success && (
+                        <div className="space-y-4 pt-4 border-t border-[#151515]">
+                            <div className="text-[11px] text-[#404040] uppercase tracking-[0.2em] font-semibold">Deployed Contracts</div>
+                            <div className="p-4 rounded-xl bg-[#0a0a0a] border border-[#1a1a1a] space-y-3">
+                                <div className="text-[14px] text-white font-medium">
+                                    {deployResult.contractId?.slice(0, 12)}...{deployResult.contractId?.slice(-6)}
+                                </div>
+                                {deployResult.explorerUrl && (
+                                    <a
+                                        href={deployResult.explorerUrl}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="flex items-center gap-2 text-[13px] text-[#3B82F6] hover:text-[#60a5fa] transition-colors"
+                                    >
+                                        <ExternalLinkIcon />
+                                        <span>View on Explorer</span>
+                                    </a>
+                                )}
+                            </div>
+                        </div>
+                    )}
+                </div>
+            </motion.div>
+        );
+    }
+
+    // ─── SEARCH VIEW (minimal) ────────────────────────────────────────────────
+
+    if (activeView === "search") {
+        return (
+            <motion.div
+                className="w-[300px] flex flex-col h-full select-none relative overflow-hidden"
+                style={{ background: 'linear-gradient(180deg, #050505 0%, #000000 100%)' }}
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+            >
+                <div className="absolute right-0 top-0 bottom-0 w-[1px] bg-gradient-to-b from-[#FFC800]/15 via-[#1a1a1a] to-transparent" />
+                <div className="h-14 flex items-center px-5 border-b border-[#151515]">
+                    <span className="text-[13px] font-semibold text-[#505050] uppercase tracking-[0.15em]">Search</span>
+                </div>
+                <div className="flex-1 flex items-center justify-center">
+                    <span className="text-[14px] text-[#303030]">Coming soon</span>
+                </div>
+            </motion.div>
+        );
+    }
+
+    // ─── WORKSPACE VIEW (Files + Build combined) ──────────────────────────────
 
     return (
         <motion.div

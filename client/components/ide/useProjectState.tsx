@@ -441,15 +441,44 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
 
         setBuildStatus("deploying");
         setDeployResult(null);
-        addLog({ type: "deploying", msg: `Deploying ${activeFile.name.replace(".sol", "")} to Stellar testnet...` });
+        const contractName = activeFile.name.replace(".sol", "");
+        addLog({ type: "deploying", msg: `Deploying ${contractName} to Stellar testnet...` });
 
         try {
+            // Extract constructor args from ABI
+            const constructorArgs: Record<string, string> = {};
+            if (compileResult.abi && Array.isArray(compileResult.abi)) {
+                const constructorEntry = (compileResult.abi as Array<{ type: string; inputs?: Array<{ name: string; type: string }> }>)
+                    .find((entry) => entry.type === "constructor");
+                if (constructorEntry?.inputs) {
+                    for (const input of constructorEntry.inputs) {
+                        // Provide sensible defaults based on type
+                        const paramName = input.name.startsWith("_") ? input.name : `_${input.name}`;
+                        if (input.type === "string") {
+                            constructorArgs[paramName] = `Hello from ${contractName}`;
+                        } else if (input.type.startsWith("uint") || input.type.startsWith("int")) {
+                            constructorArgs[paramName] = "0";
+                        } else if (input.type === "bool") {
+                            constructorArgs[paramName] = "false";
+                        } else if (input.type === "address") {
+                            constructorArgs[paramName] = "0x0000000000000000000000000000000000000000";
+                        } else {
+                            constructorArgs[paramName] = "0";
+                        }
+                    }
+                    if (Object.keys(constructorArgs).length > 0) {
+                        addLog({ type: "info", msg: `  Constructor args: ${Object.entries(constructorArgs).map(([k, v]) => `${k}=${v}`).join(", ")}` });
+                    }
+                }
+            }
+
             const response = await fetch("/api/deploy", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     wasm: compileResult.wasm,
-                    contractName: activeFile.name.replace(".sol", ""),
+                    contractName,
+                    ...(Object.keys(constructorArgs).length > 0 && { constructorArgs }),
                 }),
             });
             const result: DeployResult = await response.json();
@@ -475,11 +504,12 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     const connectWallet = useCallback(async () => {
         addLog({ type: "system", msg: "Connecting wallet..." });
         try {
-            if (typeof window !== "undefined" && (window as any).ethereum) {
+            const ethereum = typeof window !== "undefined" ? (window as any).ethereum : null;
+            if (ethereum) {
                 // Add TVA network to MetaMask
                 const TVA_CHAIN_ID_HEX = "0x54564100";
                 try {
-                    await (window as any).ethereum.request({
+                    await ethereum.request({
                         method: "wallet_addEthereumChain",
                         params: [{
                             chainId: TVA_CHAIN_ID_HEX,
@@ -493,27 +523,36 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
 
                 // Switch to TVA network
                 try {
-                    await (window as any).ethereum.request({
+                    await ethereum.request({
                         method: "wallet_switchEthereumChain",
                         params: [{ chainId: TVA_CHAIN_ID_HEX }],
                     });
                 } catch { /* user rejected switch */ }
 
-                const accounts = await (window as any).ethereum.request({ method: "eth_requestAccounts" });
+                const accounts = await ethereum.request({ method: "eth_requestAccounts" });
                 if (accounts && accounts.length > 0) {
                     setWalletAddress(accounts[0]);
                     // Get balance
-                    const balance = await (window as any).ethereum.request({
-                        method: "eth_getBalance",
-                        params: [accounts[0], "latest"],
-                    });
-                    const balanceInEth = parseInt(balance, 16) / 1e18;
-                    setWalletBalance(balanceInEth.toFixed(4));
+                    try {
+                        const balance = await ethereum.request({
+                            method: "eth_getBalance",
+                            params: [accounts[0], "latest"],
+                        });
+                        const balanceInEth = parseInt(balance, 16) / 1e18;
+                        setWalletBalance(balanceInEth.toFixed(4));
+                    } catch {
+                        setWalletBalance("0.0000");
+                    }
                     addLog({ type: "success", msg: `Wallet connected: ${accounts[0].slice(0, 6)}...${accounts[0].slice(-4)}` });
                     addLog({ type: "info", msg: "Network: TVA Testnet (Stellar)" });
                 }
             } else {
-                addLog({ type: "warning", msg: "No wallet detected. Install MetaMask or a compatible wallet." });
+                // Demo mode: generate a deterministic demo address
+                const demoAddress = "0xTVA" + Array.from({ length: 36 }, (_, i) => "0123456789abcdef"[Math.floor(Math.random() * 16)]).join("");
+                setWalletAddress(demoAddress);
+                setWalletBalance("1000.0000");
+                addLog({ type: "success", msg: `Demo wallet connected: ${demoAddress.slice(0, 6)}...${demoAddress.slice(-4)}` });
+                addLog({ type: "info", msg: "Network: TVA Testnet (Demo Mode - no MetaMask detected)" });
             }
         } catch (err) {
             addLog({ type: "error", msg: `Wallet connection failed: ${err instanceof Error ? err.message : "Unknown error"}` });

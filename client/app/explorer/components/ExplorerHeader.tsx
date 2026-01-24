@@ -12,33 +12,39 @@ export function ExplorerHeader() {
   const [connecting, setConnecting] = useState(false);
 
   const connectWallet = async () => {
-    if (typeof window === "undefined" || !(window as any).ethereum) return;
     setConnecting(true);
     try {
-      // Add TVA network to MetaMask
-      try {
-        await (window as any).ethereum.request({
-          method: "wallet_addEthereumChain",
-          params: [{
-            chainId: `0x${TVA_CHAIN_ID.toString(16)}`,
-            chainName: "TVA Testnet",
-            nativeCurrency: { name: "XLM", symbol: "XLM", decimals: 18 },
-            rpcUrls: [window.location.origin + "/api/rpc"],
-            blockExplorerUrls: [window.location.origin + "/explorer"],
-          }],
-        });
-      } catch { /* network may already exist */ }
+      const ethereum = typeof window !== "undefined" ? (window as any).ethereum : null;
+      if (ethereum) {
+        // Add TVA network to MetaMask
+        try {
+          await ethereum.request({
+            method: "wallet_addEthereumChain",
+            params: [{
+              chainId: `0x${TVA_CHAIN_ID.toString(16)}`,
+              chainName: "TVA Testnet",
+              nativeCurrency: { name: "XLM", symbol: "XLM", decimals: 18 },
+              rpcUrls: [window.location.origin + "/api/rpc"],
+              blockExplorerUrls: [window.location.origin + "/explorer"],
+            }],
+          });
+        } catch { /* network may already exist */ }
 
-      // Switch to TVA network
-      try {
-        await (window as any).ethereum.request({
-          method: "wallet_switchEthereumChain",
-          params: [{ chainId: `0x${TVA_CHAIN_ID.toString(16)}` }],
-        });
-      } catch { /* user rejected switch */ }
+        // Switch to TVA network
+        try {
+          await ethereum.request({
+            method: "wallet_switchEthereumChain",
+            params: [{ chainId: `0x${TVA_CHAIN_ID.toString(16)}` }],
+          });
+        } catch { /* user rejected switch */ }
 
-      const accounts = await (window as any).ethereum.request({ method: "eth_requestAccounts" });
-      if (accounts?.[0]) setWalletAddress(accounts[0]);
+        const accounts = await ethereum.request({ method: "eth_requestAccounts" });
+        if (accounts?.[0]) setWalletAddress(accounts[0]);
+      } else {
+        // Demo mode fallback
+        const demoAddress = "0xTVA" + Array.from({ length: 36 }, () => "0123456789abcdef"[Math.floor(Math.random() * 16)]).join("");
+        setWalletAddress(demoAddress);
+      }
     } catch { /* user rejected */ }
     setConnecting(false);
   };

@@ -28,6 +28,37 @@ interface DeployResponse {
   error?: string;
 }
 
+function getDefaultForType(type: string, contractName: string): string {
+  switch (type.toLowerCase()) {
+    case 'string':
+      return `Hello from ${contractName}`;
+    case 'u32':
+    case 'u64':
+    case 'u128':
+    case 'i32':
+    case 'i64':
+    case 'i128':
+    case 'uint256':
+    case 'uint128':
+    case 'uint64':
+    case 'uint32':
+    case 'int256':
+    case 'int128':
+    case 'int64':
+    case 'int32':
+      return '0';
+    case 'bool':
+      return 'false';
+    case 'address':
+      return 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF';
+    case 'bytes':
+    case 'bytes32':
+      return '0000000000000000000000000000000000000000000000000000000000000000';
+    default:
+      return '0';
+  }
+}
+
 export async function POST(request: NextRequest): Promise<NextResponse<DeployResponse>> {
   let tempWasmPath: string | null = null;
 
@@ -72,18 +103,57 @@ export async function POST(request: NextRequest): Promise<NextResponse<DeployRes
     ];
 
     // Append constructor args if provided
-    if (body.constructorArgs && typeof body.constructorArgs === 'object') {
+    if (body.constructorArgs && typeof body.constructorArgs === 'object' && Object.keys(body.constructorArgs).length > 0) {
       args.push('--');
       for (const [argName, argValue] of Object.entries(body.constructorArgs)) {
-        args.push(`--${argName}`, String(argValue));
+        const flag = argName.startsWith('-') ? argName : `--${argName}`;
+        args.push(flag, String(argValue));
       }
     }
 
-    // Execute the stellar CLI
-    const { stdout, stderr } = await execFileAsync(STELLAR_BIN, args, {
-      cwd: PROJECT_ROOT,
-      timeout: 120000,
-    });
+    // Execute the stellar CLI - with retry logic for missing constructor args
+    let stdout: string;
+    let stderr: string;
+    try {
+      const result = await execFileAsync(STELLAR_BIN, args, {
+        cwd: PROJECT_ROOT,
+        timeout: 120000,
+      });
+      stdout = result.stdout;
+      stderr = result.stderr;
+    } catch (deployError: unknown) {
+      const err = deployError as { message?: string; stderr?: string; stdout?: string };
+      const errorOutput = `${err.message || ''}\n${err.stderr || ''}`;
+
+      // Check if the error is about missing constructor arguments
+      const missingArgPattern = /Missing required argument ['`"]?([^'`"]+)['`"]? of type (\w+)/g;
+      const missingArgs: Array<{ name: string; type: string }> = [];
+      let argMatch;
+      while ((argMatch = missingArgPattern.exec(errorOutput)) !== null) {
+        missingArgs.push({ name: argMatch[1], type: argMatch[2] });
+      }
+
+      if (missingArgs.length > 0) {
+        // Retry with default constructor arguments
+        const retryArgs = [...args];
+        if (!retryArgs.includes('--')) {
+          retryArgs.push('--');
+        }
+        for (const arg of missingArgs) {
+          const defaultValue = getDefaultForType(arg.type, body.contractName);
+          retryArgs.push(`--${arg.name}`, defaultValue);
+        }
+
+        const retryResult = await execFileAsync(STELLAR_BIN, retryArgs, {
+          cwd: PROJECT_ROOT,
+          timeout: 120000,
+        });
+        stdout = retryResult.stdout;
+        stderr = retryResult.stderr;
+      } else {
+        throw deployError;
+      }
+    }
 
     // Combine stdout and stderr to search for contract ID
     const combinedOutput = `${stdout}\n${stderr}`;
