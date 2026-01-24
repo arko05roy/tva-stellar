@@ -100,7 +100,7 @@ function genId() {
 
 // --- Solidity Templates ---
 
-export type SolidityTemplate = "blank" | "counter" | "greeter" | "erc20" | "storage";
+export type SolidityTemplate = "blank" | "counter" | "greeter" | "erc20" | "erc721" | "erc1155" | "storage";
 
 export const SOLIDITY_TEMPLATES: Record<SolidityTemplate, { name: string; description: string; defaultFileName: string; content: string }> = {
     blank: {
@@ -208,6 +208,133 @@ contract Token {
 }
 `
     },
+    erc721: {
+        name: "ERC721 NFT",
+        description: "Basic NFT token implementation",
+        defaultFileName: "NFT.sol",
+        content: `// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+// Soroban-compatible ERC721 NFT
+// Simplified implementation for Soroban compatibility.
+contract NFT {
+    string public name;
+    string public symbol;
+    address public owner;
+    uint128 public totalMinted;
+    uint128 public nextTokenId;
+
+    // Track ownership count per address (simplified)
+    uint128 public ownerTokenCount;
+
+    constructor(string memory _name, string memory _symbol) {
+        name = _name;
+        symbol = _symbol;
+        owner = msg.sender;
+        totalMinted = 0;
+        nextTokenId = 1;
+        ownerTokenCount = 0;
+    }
+
+    function mint() public returns (uint128) {
+        uint128 tokenId = nextTokenId;
+        nextTokenId += 1;
+        totalMinted += 1;
+        ownerTokenCount += 1;
+        return tokenId;
+    }
+
+    function burn(uint128 tokenId) public {
+        if (ownerTokenCount == 0) {
+            return;
+        }
+        totalMinted -= 1;
+        ownerTokenCount -= 1;
+    }
+
+    function balanceOf() public view returns (uint128) {
+        return ownerTokenCount;
+    }
+
+    function totalSupply() public view returns (uint128) {
+        return totalMinted;
+    }
+
+    function getNextTokenId() public view returns (uint128) {
+        return nextTokenId;
+    }
+}
+`
+    },
+    erc1155: {
+        name: "ERC1155 Multi-Token",
+        description: "Multi-token standard implementation",
+        defaultFileName: "MultiToken.sol",
+        content: `// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+// Soroban-compatible ERC1155 Multi-Token
+// Simplified implementation for Soroban compatibility.
+contract MultiToken {
+    string public name;
+    address public owner;
+
+    // Simplified balance tracking for token IDs 1, 2, 3
+    uint128 public balance1;
+    uint128 public balance2;
+    uint128 public balance3;
+
+    constructor(string memory _name) {
+        name = _name;
+        owner = msg.sender;
+        balance1 = 0;
+        balance2 = 0;
+        balance3 = 0;
+    }
+
+    function mint(uint128 tokenId, uint128 amount) public {
+        if (tokenId == 1) {
+            balance1 += amount;
+        } else if (tokenId == 2) {
+            balance2 += amount;
+        } else if (tokenId == 3) {
+            balance3 += amount;
+        }
+    }
+
+    function burn(uint128 tokenId, uint128 amount) public {
+        if (tokenId == 1 && balance1 >= amount) {
+            balance1 -= amount;
+        } else if (tokenId == 2 && balance2 >= amount) {
+            balance2 -= amount;
+        } else if (tokenId == 3 && balance3 >= amount) {
+            balance3 -= amount;
+        }
+    }
+
+    function balanceOf(uint128 tokenId) public view returns (uint128) {
+        if (tokenId == 1) {
+            return balance1;
+        } else if (tokenId == 2) {
+            return balance2;
+        } else if (tokenId == 3) {
+            return balance3;
+        }
+        return 0;
+    }
+
+    function mintBatch(uint128 amount1, uint128 amount2, uint128 amount3) public {
+        balance1 += amount1;
+        balance2 += amount2;
+        balance3 += amount3;
+    }
+
+    function getTotalBalance() public view returns (uint128) {
+        return balance1 + balance2 + balance3;
+    }
+}
+`
+    },
     storage: {
         name: "Simple Storage",
         description: "Store and retrieve a single value",
@@ -227,6 +354,2505 @@ contract Storage {
 
     function retrieve() public view returns (uint128) {
         return value;
+    }
+}
+`
+    }
+};
+
+// --- OpenZeppelin Templates ---
+
+export type OpenZeppelinTemplate =
+    // ERC20 Tokens
+    | "oz-erc20"
+    | "oz-erc20-burnable"
+    | "oz-erc20-pausable"
+    | "oz-erc20-capped"
+    | "oz-erc20-snapshot"
+    | "oz-erc20-votes"
+    | "oz-erc20-flashmint"
+    | "oz-erc20-wrapper"
+    // ERC721 NFTs
+    | "oz-erc721"
+    | "oz-erc721-burnable"
+    | "oz-erc721-enumerable"
+    | "oz-erc721-uri"
+    | "oz-erc721-royalty"
+    | "oz-erc721-votes"
+    // ERC1155 Multi-Token
+    | "oz-erc1155"
+    | "oz-erc1155-supply"
+    | "oz-erc1155-uri"
+    // ERC4626 Vault
+    | "oz-erc4626"
+    // Access Control
+    | "oz-ownable"
+    | "oz-ownable2step"
+    | "oz-access-control"
+    | "oz-access-enumerable"
+    | "oz-governor"
+    | "oz-votes"
+    // Security
+    | "oz-pausable"
+    | "oz-reentrancy-guard"
+    | "oz-timelock"
+    | "oz-escrow"
+    | "oz-pull-payment"
+    // Finance
+    | "oz-payment-splitter"
+    | "oz-vesting"
+    // Utilities
+    | "oz-counters"
+    | "oz-multicall"
+    | "oz-minimal-forwarder";
+
+export const OPENZEPPELIN_TEMPLATES: Record<OpenZeppelinTemplate, { name: string; description: string; defaultFileName: string; category: string; content: string }> = {
+    "oz-erc20": {
+        name: "ERC20",
+        description: "Standard fungible token",
+        defaultFileName: "MyToken.sol",
+        category: "Tokens",
+        content: `// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+/// @title ERC20 Token (Soroban-compatible)
+/// @notice OpenZeppelin-style ERC20 adapted for Soroban
+/// @dev No mappings, no indexed events, explicit storage only
+contract MyToken {
+    string public name;
+    string public symbol;
+    uint8 public decimals;
+    uint128 public totalSupply;
+    address public owner;
+    uint128 public ownerBalance;
+
+    constructor(string memory _name, string memory _symbol, uint128 _initialSupply) {
+        name = _name;
+        symbol = _symbol;
+        decimals = 7;
+        totalSupply = _initialSupply;
+        owner = msg.sender;
+        ownerBalance = _initialSupply;
+    }
+
+    function balanceOf() public view returns (uint128) {
+        return ownerBalance;
+    }
+
+    function transfer(uint128 amount) public returns (bool) {
+        if (ownerBalance < amount) {
+            return false;
+        }
+        ownerBalance -= amount;
+        return true;
+    }
+
+    function mint(uint128 amount) public {
+        if (msg.sender != owner) {
+            return;
+        }
+        totalSupply += amount;
+        ownerBalance += amount;
+    }
+
+    function burn(uint128 amount) public {
+        if (ownerBalance < amount) {
+            return;
+        }
+        ownerBalance -= amount;
+        totalSupply -= amount;
+    }
+}
+`
+    },
+    "oz-erc20-burnable": {
+        name: "ERC20 Burnable",
+        description: "ERC20 with burn functionality",
+        defaultFileName: "BurnableToken.sol",
+        category: "Tokens",
+        content: `// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+/// @title ERC20 Burnable (Soroban-compatible)
+/// @notice Fungible token with burn and burnFrom functionality
+/// @dev No mappings, no indexed events, explicit storage only
+contract BurnableToken {
+    string public name;
+    string public symbol;
+    uint8 public decimals;
+    uint128 public totalSupply;
+    address public owner;
+    uint128 public ownerBalance;
+    uint128 public totalBurned;
+
+    constructor(string memory _name, string memory _symbol, uint128 _initialSupply) {
+        name = _name;
+        symbol = _symbol;
+        decimals = 7;
+        totalSupply = _initialSupply;
+        owner = msg.sender;
+        ownerBalance = _initialSupply;
+        totalBurned = 0;
+    }
+
+    function balanceOf() public view returns (uint128) {
+        return ownerBalance;
+    }
+
+    function mint(uint128 amount) public {
+        if (msg.sender != owner) {
+            return;
+        }
+        totalSupply += amount;
+        ownerBalance += amount;
+    }
+
+    function burn(uint128 amount) public {
+        if (ownerBalance < amount) {
+            return;
+        }
+        ownerBalance -= amount;
+        totalSupply -= amount;
+        totalBurned += amount;
+    }
+
+    function getTotalBurned() public view returns (uint128) {
+        return totalBurned;
+    }
+}
+`
+    },
+    "oz-erc20-pausable": {
+        name: "ERC20 Pausable",
+        description: "ERC20 with pause functionality",
+        defaultFileName: "PausableToken.sol",
+        category: "Tokens",
+        content: `// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+/// @title ERC20 Pausable (Soroban-compatible)
+/// @notice Fungible token with emergency pause functionality
+/// @dev No mappings, no indexed events, explicit storage only
+contract PausableToken {
+    string public name;
+    string public symbol;
+    uint8 public decimals;
+    uint128 public totalSupply;
+    address public owner;
+    uint128 public ownerBalance;
+    bool public paused;
+
+    constructor(string memory _name, string memory _symbol, uint128 _initialSupply) {
+        name = _name;
+        symbol = _symbol;
+        decimals = 7;
+        totalSupply = _initialSupply;
+        owner = msg.sender;
+        ownerBalance = _initialSupply;
+        paused = false;
+    }
+
+    function pause() public {
+        if (msg.sender != owner) {
+            return;
+        }
+        paused = true;
+    }
+
+    function unpause() public {
+        if (msg.sender != owner) {
+            return;
+        }
+        paused = false;
+    }
+
+    function transfer(uint128 amount) public returns (bool) {
+        if (paused) {
+            return false;
+        }
+        if (ownerBalance < amount) {
+            return false;
+        }
+        ownerBalance -= amount;
+        return true;
+    }
+
+    function mint(uint128 amount) public {
+        if (msg.sender != owner) {
+            return;
+        }
+        if (paused) {
+            return;
+        }
+        totalSupply += amount;
+        ownerBalance += amount;
+    }
+
+    function balanceOf() public view returns (uint128) {
+        return ownerBalance;
+    }
+}
+`
+    },
+    "oz-erc721": {
+        name: "ERC721",
+        description: "Standard NFT token",
+        defaultFileName: "MyNFT.sol",
+        category: "Tokens",
+        content: `// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+/// @title ERC721 NFT (Soroban-compatible)
+/// @notice OpenZeppelin-style NFT adapted for Soroban
+/// @dev No mappings, no indexed events, explicit storage only
+contract MyNFT {
+    string public name;
+    string public symbol;
+    address public owner;
+    uint128 public totalSupply;
+    uint128 public nextTokenId;
+    uint128 public ownerBalance;
+    string public baseURI;
+
+    constructor(string memory _name, string memory _symbol) {
+        name = _name;
+        symbol = _symbol;
+        owner = msg.sender;
+        totalSupply = 0;
+        nextTokenId = 1;
+        ownerBalance = 0;
+        baseURI = "";
+    }
+
+    function setBaseURI(string memory _baseURI) public {
+        if (msg.sender != owner) {
+            return;
+        }
+        baseURI = _baseURI;
+    }
+
+    function mint() public returns (uint128) {
+        if (msg.sender != owner) {
+            return 0;
+        }
+        uint128 tokenId = nextTokenId;
+        nextTokenId += 1;
+        totalSupply += 1;
+        ownerBalance += 1;
+        return tokenId;
+    }
+
+    function balanceOf() public view returns (uint128) {
+        return ownerBalance;
+    }
+
+    function getBaseURI() public view returns (string memory) {
+        return baseURI;
+    }
+}
+`
+    },
+    "oz-erc721-burnable": {
+        name: "ERC721 Burnable",
+        description: "NFT with burn functionality",
+        defaultFileName: "BurnableNFT.sol",
+        category: "Tokens",
+        content: `// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+/// @title ERC721 Burnable (Soroban-compatible)
+/// @notice NFT with burn functionality
+/// @dev No mappings, no indexed events, explicit storage only
+contract BurnableNFT {
+    string public name;
+    string public symbol;
+    address public owner;
+    uint128 public totalSupply;
+    uint128 public nextTokenId;
+    uint128 public ownerBalance;
+    uint128 public burnedCount;
+
+    constructor(string memory _name, string memory _symbol) {
+        name = _name;
+        symbol = _symbol;
+        owner = msg.sender;
+        totalSupply = 0;
+        nextTokenId = 1;
+        ownerBalance = 0;
+        burnedCount = 0;
+    }
+
+    function mint() public returns (uint128) {
+        if (msg.sender != owner) {
+            return 0;
+        }
+        uint128 tokenId = nextTokenId;
+        nextTokenId += 1;
+        totalSupply += 1;
+        ownerBalance += 1;
+        return tokenId;
+    }
+
+    function burn() public {
+        if (ownerBalance == 0) {
+            return;
+        }
+        ownerBalance -= 1;
+        totalSupply -= 1;
+        burnedCount += 1;
+    }
+
+    function balanceOf() public view returns (uint128) {
+        return ownerBalance;
+    }
+
+    function getBurnedCount() public view returns (uint128) {
+        return burnedCount;
+    }
+}
+`
+    },
+    "oz-erc721-enumerable": {
+        name: "ERC721 Enumerable",
+        description: "NFT with enumeration support",
+        defaultFileName: "EnumerableNFT.sol",
+        category: "Tokens",
+        content: `// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+/// @title ERC721 Enumerable (Soroban-compatible)
+/// @notice NFT with token enumeration support
+/// @dev No mappings, explicit token slots for enumeration
+contract EnumerableNFT {
+    string public name;
+    string public symbol;
+    address public owner;
+    uint128 public totalSupply;
+    uint128 public nextTokenId;
+    uint128 public ownerBalance;
+
+    // Explicit token slots (max 5 tokens for demo)
+    uint128 public token0;
+    uint128 public token1;
+    uint128 public token2;
+    uint128 public token3;
+    uint128 public token4;
+
+    constructor(string memory _name, string memory _symbol) {
+        name = _name;
+        symbol = _symbol;
+        owner = msg.sender;
+        totalSupply = 0;
+        nextTokenId = 1;
+        ownerBalance = 0;
+        token0 = 0;
+        token1 = 0;
+        token2 = 0;
+        token3 = 0;
+        token4 = 0;
+    }
+
+    function mint() public returns (uint128) {
+        if (msg.sender != owner) {
+            return 0;
+        }
+        if (totalSupply >= 5) {
+            return 0;
+        }
+        uint128 tokenId = nextTokenId;
+        nextTokenId += 1;
+
+        if (totalSupply == 0) token0 = tokenId;
+        else if (totalSupply == 1) token1 = tokenId;
+        else if (totalSupply == 2) token2 = tokenId;
+        else if (totalSupply == 3) token3 = tokenId;
+        else if (totalSupply == 4) token4 = tokenId;
+
+        totalSupply += 1;
+        ownerBalance += 1;
+        return tokenId;
+    }
+
+    function tokenByIndex(uint128 index) public view returns (uint128) {
+        if (index >= totalSupply) {
+            return 0;
+        }
+        if (index == 0) return token0;
+        if (index == 1) return token1;
+        if (index == 2) return token2;
+        if (index == 3) return token3;
+        if (index == 4) return token4;
+        return 0;
+    }
+
+    function balanceOf() public view returns (uint128) {
+        return ownerBalance;
+    }
+}
+`
+    },
+    "oz-erc1155": {
+        name: "ERC1155",
+        description: "Multi-token standard",
+        defaultFileName: "MyMultiToken.sol",
+        category: "Tokens",
+        content: `// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+/// @title ERC1155 Multi-Token (Soroban-compatible)
+/// @notice Multi-token standard with multiple token types
+/// @dev No mappings, explicit balance slots for each token ID
+contract MyMultiToken {
+    string public name;
+    string public uri;
+    address public owner;
+
+    // Explicit balance slots for token IDs 0-4
+    uint128 public balance0;
+    uint128 public balance1;
+    uint128 public balance2;
+    uint128 public balance3;
+    uint128 public balance4;
+
+    constructor(string memory _uri) {
+        name = "MyMultiToken";
+        uri = _uri;
+        owner = msg.sender;
+        balance0 = 0;
+        balance1 = 0;
+        balance2 = 0;
+        balance3 = 0;
+        balance4 = 0;
+    }
+
+    function setURI(string memory _uri) public {
+        if (msg.sender != owner) {
+            return;
+        }
+        uri = _uri;
+    }
+
+    function mint(uint128 id, uint128 amount) public {
+        if (msg.sender != owner) {
+            return;
+        }
+        if (id == 0) balance0 += amount;
+        else if (id == 1) balance1 += amount;
+        else if (id == 2) balance2 += amount;
+        else if (id == 3) balance3 += amount;
+        else if (id == 4) balance4 += amount;
+    }
+
+    function burn(uint128 id, uint128 amount) public {
+        if (id == 0 && balance0 >= amount) balance0 -= amount;
+        else if (id == 1 && balance1 >= amount) balance1 -= amount;
+        else if (id == 2 && balance2 >= amount) balance2 -= amount;
+        else if (id == 3 && balance3 >= amount) balance3 -= amount;
+        else if (id == 4 && balance4 >= amount) balance4 -= amount;
+    }
+
+    function balanceOf(uint128 id) public view returns (uint128) {
+        if (id == 0) return balance0;
+        if (id == 1) return balance1;
+        if (id == 2) return balance2;
+        if (id == 3) return balance3;
+        if (id == 4) return balance4;
+        return 0;
+    }
+
+    function getTotalBalance() public view returns (uint128) {
+        return balance0 + balance1 + balance2 + balance3 + balance4;
+    }
+}
+`
+    },
+    "oz-erc1155-supply": {
+        name: "ERC1155 Supply",
+        description: "ERC1155 with supply tracking",
+        defaultFileName: "SupplyToken.sol",
+        category: "Tokens",
+        content: `// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+/// @title ERC1155 with Supply Tracking (Soroban-compatible)
+/// @notice Multi-token with per-token and total supply tracking
+/// @dev No mappings, explicit slots for balances and supplies
+contract SupplyToken {
+    string public name;
+    string public uri;
+    address public owner;
+
+    // Balances and supplies for token IDs 0-2
+    uint128 public balance0;
+    uint128 public balance1;
+    uint128 public balance2;
+    uint128 public supply0;
+    uint128 public supply1;
+    uint128 public supply2;
+    uint128 public totalSupplyAll;
+
+    constructor(string memory _uri) {
+        name = "SupplyToken";
+        uri = _uri;
+        owner = msg.sender;
+        balance0 = 0;
+        balance1 = 0;
+        balance2 = 0;
+        supply0 = 0;
+        supply1 = 0;
+        supply2 = 0;
+        totalSupplyAll = 0;
+    }
+
+    function mint(uint128 id, uint128 amount) public {
+        if (msg.sender != owner) {
+            return;
+        }
+        if (id == 0) { balance0 += amount; supply0 += amount; }
+        else if (id == 1) { balance1 += amount; supply1 += amount; }
+        else if (id == 2) { balance2 += amount; supply2 += amount; }
+        totalSupplyAll += amount;
+    }
+
+    function burn(uint128 id, uint128 amount) public {
+        if (id == 0 && balance0 >= amount) {
+            balance0 -= amount;
+            supply0 -= amount;
+            totalSupplyAll -= amount;
+        } else if (id == 1 && balance1 >= amount) {
+            balance1 -= amount;
+            supply1 -= amount;
+            totalSupplyAll -= amount;
+        } else if (id == 2 && balance2 >= amount) {
+            balance2 -= amount;
+            supply2 -= amount;
+            totalSupplyAll -= amount;
+        }
+    }
+
+    function balanceOf(uint128 id) public view returns (uint128) {
+        if (id == 0) return balance0;
+        if (id == 1) return balance1;
+        if (id == 2) return balance2;
+        return 0;
+    }
+
+    function totalSupply(uint128 id) public view returns (uint128) {
+        if (id == 0) return supply0;
+        if (id == 1) return supply1;
+        if (id == 2) return supply2;
+        return 0;
+    }
+
+    function exists(uint128 id) public view returns (bool) {
+        if (id == 0) return supply0 > 0;
+        if (id == 1) return supply1 > 0;
+        if (id == 2) return supply2 > 0;
+        return false;
+    }
+}
+`
+    },
+    "oz-ownable": {
+        name: "Ownable",
+        description: "Basic access control",
+        defaultFileName: "OwnableContract.sol",
+        category: "Access",
+        content: `// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+/// @title Ownable (Soroban-compatible)
+/// @notice Basic ownership management with two-step transfer
+/// @dev No require statements, uses if/return pattern
+contract OwnableContract {
+    address public owner;
+    address public pendingOwner;
+    bool public hasPendingOwner;
+
+    constructor() {
+        owner = msg.sender;
+        pendingOwner = address(0);
+        hasPendingOwner = false;
+    }
+
+    function transferOwnership(address newOwner) public {
+        if (msg.sender != owner) {
+            return;
+        }
+        pendingOwner = newOwner;
+        hasPendingOwner = true;
+    }
+
+    function acceptOwnership() public {
+        if (!hasPendingOwner) {
+            return;
+        }
+        if (msg.sender != pendingOwner) {
+            return;
+        }
+        owner = pendingOwner;
+        pendingOwner = address(0);
+        hasPendingOwner = false;
+    }
+
+    function renounceOwnership() public {
+        if (msg.sender != owner) {
+            return;
+        }
+        owner = address(0);
+    }
+
+    function getOwner() public view returns (address) {
+        return owner;
+    }
+
+    function isOwner() public view returns (bool) {
+        return msg.sender == owner;
+    }
+}
+`
+    },
+    "oz-access-control": {
+        name: "Access Control",
+        description: "Role-based access control",
+        defaultFileName: "AccessControlled.sol",
+        category: "Access",
+        content: `// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+/// @title Access Control (Soroban-compatible)
+/// @notice Role-based permissions with admin, minter, pauser roles
+/// @dev No mappings, explicit role tracking
+contract AccessControlled {
+    address public admin;
+    address public minter;
+    address public pauser;
+    bool public minterSet;
+    bool public pauserSet;
+
+    constructor() {
+        admin = msg.sender;
+        minter = address(0);
+        pauser = address(0);
+        minterSet = false;
+        pauserSet = false;
+    }
+
+    function grantMinterRole(address account) public {
+        if (msg.sender != admin) {
+            return;
+        }
+        minter = account;
+        minterSet = true;
+    }
+
+    function grantPauserRole(address account) public {
+        if (msg.sender != admin) {
+            return;
+        }
+        pauser = account;
+        pauserSet = true;
+    }
+
+    function revokeMinterRole() public {
+        if (msg.sender != admin) {
+            return;
+        }
+        minter = address(0);
+        minterSet = false;
+    }
+
+    function revokePauserRole() public {
+        if (msg.sender != admin) {
+            return;
+        }
+        pauser = address(0);
+        pauserSet = false;
+    }
+
+    function hasMinterRole(address account) public view returns (bool) {
+        return minterSet && minter == account;
+    }
+
+    function hasPauserRole(address account) public view returns (bool) {
+        return pauserSet && pauser == account;
+    }
+
+    function hasAdminRole(address account) public view returns (bool) {
+        return admin == account;
+    }
+}
+`
+    },
+    "oz-pausable": {
+        name: "Pausable",
+        description: "Emergency stop mechanism",
+        defaultFileName: "PausableContract.sol",
+        category: "Security",
+        content: `// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+/// @title Pausable (Soroban-compatible)
+/// @notice Emergency pause mechanism for contract operations
+/// @dev No require statements, uses if/return pattern
+contract PausableContract {
+    address public owner;
+    bool public paused;
+    uint128 public value;
+
+    constructor() {
+        owner = msg.sender;
+        paused = false;
+        value = 0;
+    }
+
+    function pause() public {
+        if (msg.sender != owner) {
+            return;
+        }
+        if (paused) {
+            return;
+        }
+        paused = true;
+    }
+
+    function unpause() public {
+        if (msg.sender != owner) {
+            return;
+        }
+        if (!paused) {
+            return;
+        }
+        paused = false;
+    }
+
+    function isPaused() public view returns (bool) {
+        return paused;
+    }
+
+    function setValue(uint128 _value) public {
+        if (paused) {
+            return;
+        }
+        value = _value;
+    }
+
+    function getValue() public view returns (uint128) {
+        return value;
+    }
+}
+`
+    },
+    "oz-reentrancy-guard": {
+        name: "Reentrancy Guard",
+        description: "Prevent reentrancy attacks",
+        defaultFileName: "SecureContract.sol",
+        category: "Security",
+        content: `// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+/// @title Reentrancy Guard (Soroban-compatible)
+/// @notice Prevents reentrant calls to protected functions
+/// @dev Uses lock flag pattern instead of modifier
+contract SecureContract {
+    address public owner;
+    uint128 public balance;
+    bool public locked;
+
+    constructor() {
+        owner = msg.sender;
+        balance = 0;
+        locked = false;
+    }
+
+    function deposit(uint128 amount) public {
+        if (locked) {
+            return;
+        }
+        locked = true;
+        balance += amount;
+        locked = false;
+    }
+
+    function withdraw(uint128 amount) public {
+        if (locked) {
+            return;
+        }
+        if (balance < amount) {
+            return;
+        }
+        locked = true;
+        balance -= amount;
+        locked = false;
+    }
+
+    function getBalance() public view returns (uint128) {
+        return balance;
+    }
+
+    function isLocked() public view returns (bool) {
+        return locked;
+    }
+}
+`
+    },
+    "oz-erc20-capped": {
+        name: "ERC20 Capped",
+        description: "ERC20 with max supply cap",
+        defaultFileName: "CappedToken.sol",
+        category: "Tokens",
+        content: `// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+/// @title ERC20 Capped (Soroban-compatible)
+/// @notice Fungible token with maximum supply cap
+/// @dev No mappings, explicit storage, cap enforcement
+contract CappedToken {
+    string public name;
+    string public symbol;
+    uint8 public decimals;
+    uint128 public totalSupply;
+    uint128 public cap;
+    address public owner;
+    uint128 public ownerBalance;
+
+    constructor(string memory _name, string memory _symbol, uint128 _cap) {
+        name = _name;
+        symbol = _symbol;
+        decimals = 7;
+        cap = _cap;
+        totalSupply = 0;
+        owner = msg.sender;
+        ownerBalance = 0;
+    }
+
+    function mint(uint128 amount) public {
+        if (msg.sender != owner) {
+            return;
+        }
+        if (totalSupply + amount > cap) {
+            return;
+        }
+        totalSupply += amount;
+        ownerBalance += amount;
+    }
+
+    function burn(uint128 amount) public {
+        if (ownerBalance < amount) {
+            return;
+        }
+        ownerBalance -= amount;
+        totalSupply -= amount;
+    }
+
+    function balanceOf() public view returns (uint128) {
+        return ownerBalance;
+    }
+
+    function remainingCap() public view returns (uint128) {
+        return cap - totalSupply;
+    }
+
+    function getCap() public view returns (uint128) {
+        return cap;
+    }
+}
+`
+    },
+    "oz-erc721-uri": {
+        name: "ERC721 URI Storage",
+        description: "NFT with per-token URIs",
+        defaultFileName: "URIStorageNFT.sol",
+        category: "Tokens",
+        content: `// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+/// @title ERC721 URI Storage (Soroban-compatible)
+/// @notice NFT with individual token URI storage
+/// @dev Explicit URI slots for first 5 tokens
+contract URIStorageNFT {
+    string public name;
+    string public symbol;
+    address public owner;
+    uint128 public totalSupply;
+    uint128 public nextTokenId;
+    uint128 public ownerBalance;
+
+    // Per-token URIs (slots for tokens 1-5)
+    string public uri1;
+    string public uri2;
+    string public uri3;
+    string public uri4;
+    string public uri5;
+
+    constructor(string memory _name, string memory _symbol) {
+        name = _name;
+        symbol = _symbol;
+        owner = msg.sender;
+        totalSupply = 0;
+        nextTokenId = 1;
+        ownerBalance = 0;
+        uri1 = "";
+        uri2 = "";
+        uri3 = "";
+        uri4 = "";
+        uri5 = "";
+    }
+
+    function mint(string memory _uri) public returns (uint128) {
+        if (msg.sender != owner) {
+            return 0;
+        }
+        if (nextTokenId > 5) {
+            return 0;
+        }
+        uint128 tokenId = nextTokenId;
+
+        if (tokenId == 1) uri1 = _uri;
+        else if (tokenId == 2) uri2 = _uri;
+        else if (tokenId == 3) uri3 = _uri;
+        else if (tokenId == 4) uri4 = _uri;
+        else if (tokenId == 5) uri5 = _uri;
+
+        nextTokenId += 1;
+        totalSupply += 1;
+        ownerBalance += 1;
+        return tokenId;
+    }
+
+    function tokenURI(uint128 tokenId) public view returns (string memory) {
+        if (tokenId == 1) return uri1;
+        if (tokenId == 2) return uri2;
+        if (tokenId == 3) return uri3;
+        if (tokenId == 4) return uri4;
+        if (tokenId == 5) return uri5;
+        return "";
+    }
+
+    function balanceOf() public view returns (uint128) {
+        return ownerBalance;
+    }
+}
+`
+    },
+    "oz-timelock": {
+        name: "Timelock",
+        description: "Time-delayed execution",
+        defaultFileName: "Timelock.sol",
+        category: "Security",
+        content: `// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+/// @title Timelock (Soroban-compatible)
+/// @notice Time-delayed value changes for governance
+/// @dev Uses block timestamp for delays
+contract Timelock {
+    address public owner;
+    uint128 public delay;
+    uint128 public pendingValue;
+    uint128 public currentValue;
+    uint128 public unlockTime;
+    bool public hasPending;
+
+    constructor(uint128 _delay) {
+        owner = msg.sender;
+        delay = _delay;
+        pendingValue = 0;
+        currentValue = 0;
+        unlockTime = 0;
+        hasPending = false;
+    }
+
+    function queueValue(uint128 _value) public {
+        if (msg.sender != owner) {
+            return;
+        }
+        pendingValue = _value;
+        unlockTime = uint128(block.timestamp) + delay;
+        hasPending = true;
+    }
+
+    function executeValue() public {
+        if (msg.sender != owner) {
+            return;
+        }
+        if (!hasPending) {
+            return;
+        }
+        if (block.timestamp < unlockTime) {
+            return;
+        }
+        currentValue = pendingValue;
+        hasPending = false;
+    }
+
+    function cancelPending() public {
+        if (msg.sender != owner) {
+            return;
+        }
+        hasPending = false;
+        pendingValue = 0;
+    }
+
+    function getValue() public view returns (uint128) {
+        return currentValue;
+    }
+
+    function getTimeRemaining() public view returns (uint128) {
+        if (!hasPending) {
+            return 0;
+        }
+        if (block.timestamp >= unlockTime) {
+            return 0;
+        }
+        return unlockTime - uint128(block.timestamp);
+    }
+}
+`
+    },
+    "oz-escrow": {
+        name: "Escrow",
+        description: "Secure fund holding",
+        defaultFileName: "Escrow.sol",
+        category: "Security",
+        content: `// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+/// @title Escrow (Soroban-compatible)
+/// @notice Holds funds until conditions are met
+/// @dev Simplified escrow with single beneficiary
+contract Escrow {
+    address public owner;
+    address public beneficiary;
+    uint128 public depositAmount;
+    bool public isDeposited;
+    bool public isReleased;
+    bool public isRefunded;
+
+    constructor(address _beneficiary) {
+        owner = msg.sender;
+        beneficiary = _beneficiary;
+        depositAmount = 0;
+        isDeposited = false;
+        isReleased = false;
+        isRefunded = false;
+    }
+
+    function deposit(uint128 amount) public {
+        if (msg.sender != owner) {
+            return;
+        }
+        if (isDeposited) {
+            return;
+        }
+        depositAmount = amount;
+        isDeposited = true;
+    }
+
+    function release() public {
+        if (msg.sender != owner) {
+            return;
+        }
+        if (!isDeposited) {
+            return;
+        }
+        if (isReleased || isRefunded) {
+            return;
+        }
+        isReleased = true;
+    }
+
+    function refund() public {
+        if (msg.sender != owner) {
+            return;
+        }
+        if (!isDeposited) {
+            return;
+        }
+        if (isReleased || isRefunded) {
+            return;
+        }
+        isRefunded = true;
+    }
+
+    function getStatus() public view returns (string memory) {
+        if (isReleased) return "released";
+        if (isRefunded) return "refunded";
+        if (isDeposited) return "deposited";
+        return "empty";
+    }
+
+    function getAmount() public view returns (uint128) {
+        return depositAmount;
+    }
+}
+`
+    },
+    "oz-payment-splitter": {
+        name: "Payment Splitter",
+        description: "Split payments among payees",
+        defaultFileName: "PaymentSplitter.sol",
+        category: "Tokens",
+        content: `// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+/// @title Payment Splitter (Soroban-compatible)
+/// @notice Split payments among multiple recipients
+/// @dev Supports up to 3 payees with configurable shares
+contract PaymentSplitter {
+    address public owner;
+    address public payee1;
+    address public payee2;
+    address public payee3;
+    uint128 public shares1;
+    uint128 public shares2;
+    uint128 public shares3;
+    uint128 public totalShares;
+    uint128 public totalReceived;
+    uint128 public released1;
+    uint128 public released2;
+    uint128 public released3;
+
+    constructor(
+        address _payee1, uint128 _shares1,
+        address _payee2, uint128 _shares2,
+        address _payee3, uint128 _shares3
+    ) {
+        owner = msg.sender;
+        payee1 = _payee1;
+        payee2 = _payee2;
+        payee3 = _payee3;
+        shares1 = _shares1;
+        shares2 = _shares2;
+        shares3 = _shares3;
+        totalShares = _shares1 + _shares2 + _shares3;
+        totalReceived = 0;
+        released1 = 0;
+        released2 = 0;
+        released3 = 0;
+    }
+
+    function receivePayment(uint128 amount) public {
+        totalReceived += amount;
+    }
+
+    function releasable(uint128 payeeNum) public view returns (uint128) {
+        uint128 shares;
+        uint128 released;
+        if (payeeNum == 1) { shares = shares1; released = released1; }
+        else if (payeeNum == 2) { shares = shares2; released = released2; }
+        else if (payeeNum == 3) { shares = shares3; released = released3; }
+        else { return 0; }
+
+        uint128 totalDue = (totalReceived * shares) / totalShares;
+        if (totalDue <= released) {
+            return 0;
+        }
+        return totalDue - released;
+    }
+
+    function release(uint128 payeeNum) public {
+        uint128 amount = releasable(payeeNum);
+        if (amount == 0) {
+            return;
+        }
+        if (payeeNum == 1) released1 += amount;
+        else if (payeeNum == 2) released2 += amount;
+        else if (payeeNum == 3) released3 += amount;
+    }
+
+    function getTotalReleased() public view returns (uint128) {
+        return released1 + released2 + released3;
+    }
+}
+`
+    },
+    "oz-vesting": {
+        name: "Vesting Wallet",
+        description: "Token vesting schedule",
+        defaultFileName: "VestingWallet.sol",
+        category: "Tokens",
+        content: `// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+/// @title Vesting Wallet (Soroban-compatible)
+/// @notice Linear token vesting over time
+/// @dev Uses block timestamp for vesting calculation
+contract VestingWallet {
+    address public owner;
+    address public beneficiary;
+    uint128 public start;
+    uint128 public duration;
+    uint128 public totalAmount;
+    uint128 public released;
+
+    constructor(address _beneficiary, uint128 _duration, uint128 _amount) {
+        owner = msg.sender;
+        beneficiary = _beneficiary;
+        start = uint128(block.timestamp);
+        duration = _duration;
+        totalAmount = _amount;
+        released = 0;
+    }
+
+    function vestedAmount() public view returns (uint128) {
+        uint128 currentTime = uint128(block.timestamp);
+        if (currentTime < start) {
+            return 0;
+        }
+        uint128 elapsed = currentTime - start;
+        if (elapsed >= duration) {
+            return totalAmount;
+        }
+        return (totalAmount * elapsed) / duration;
+    }
+
+    function releasable() public view returns (uint128) {
+        uint128 vested = vestedAmount();
+        if (vested <= released) {
+            return 0;
+        }
+        return vested - released;
+    }
+
+    function release() public {
+        uint128 amount = releasable();
+        if (amount == 0) {
+            return;
+        }
+        released += amount;
+    }
+
+    function getReleased() public view returns (uint128) {
+        return released;
+    }
+
+    function getRemaining() public view returns (uint128) {
+        return totalAmount - released;
+    }
+
+    function getProgress() public view returns (uint128) {
+        if (totalAmount == 0) {
+            return 0;
+        }
+        return (released * 100) / totalAmount;
+    }
+}
+`
+    },
+    "oz-governor": {
+        name: "Governor",
+        description: "Simple governance voting",
+        defaultFileName: "SimpleGovernor.sol",
+        category: "Access",
+        content: `// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+/// @title Simple Governor (Soroban-compatible)
+/// @notice Basic proposal and voting system
+/// @dev Supports single active proposal at a time
+contract SimpleGovernor {
+    address public owner;
+    uint128 public proposalCount;
+    uint128 public votingPeriod;
+
+    // Current proposal
+    uint128 public currentProposalId;
+    string public proposalDescription;
+    uint128 public forVotes;
+    uint128 public againstVotes;
+    uint128 public proposalEnd;
+    bool public proposalActive;
+    bool public proposalExecuted;
+
+    constructor(uint128 _votingPeriod) {
+        owner = msg.sender;
+        proposalCount = 0;
+        votingPeriod = _votingPeriod;
+        currentProposalId = 0;
+        proposalDescription = "";
+        forVotes = 0;
+        againstVotes = 0;
+        proposalEnd = 0;
+        proposalActive = false;
+        proposalExecuted = false;
+    }
+
+    function propose(string memory description) public returns (uint128) {
+        if (msg.sender != owner) {
+            return 0;
+        }
+        if (proposalActive) {
+            return 0;
+        }
+        proposalCount += 1;
+        currentProposalId = proposalCount;
+        proposalDescription = description;
+        forVotes = 0;
+        againstVotes = 0;
+        proposalEnd = uint128(block.timestamp) + votingPeriod;
+        proposalActive = true;
+        proposalExecuted = false;
+        return currentProposalId;
+    }
+
+    function voteFor(uint128 weight) public {
+        if (!proposalActive) {
+            return;
+        }
+        if (block.timestamp >= proposalEnd) {
+            return;
+        }
+        forVotes += weight;
+    }
+
+    function voteAgainst(uint128 weight) public {
+        if (!proposalActive) {
+            return;
+        }
+        if (block.timestamp >= proposalEnd) {
+            return;
+        }
+        againstVotes += weight;
+    }
+
+    function execute() public {
+        if (msg.sender != owner) {
+            return;
+        }
+        if (!proposalActive) {
+            return;
+        }
+        if (block.timestamp < proposalEnd) {
+            return;
+        }
+        if (forVotes <= againstVotes) {
+            return;
+        }
+        proposalActive = false;
+        proposalExecuted = true;
+    }
+
+    function getProposalState() public view returns (string memory) {
+        if (!proposalActive && !proposalExecuted) return "none";
+        if (proposalActive && block.timestamp < proposalEnd) return "active";
+        if (proposalActive && block.timestamp >= proposalEnd) return "ended";
+        if (proposalExecuted) return "executed";
+        return "unknown";
+    }
+}
+`
+    },
+    "oz-erc20-snapshot": {
+        name: "ERC20 Snapshot",
+        description: "Token with balance snapshots",
+        defaultFileName: "SnapshotToken.sol",
+        category: "Tokens",
+        content: `// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+/// @title ERC20 Snapshot (Soroban-compatible)
+/// @notice Token with historical balance snapshots
+/// @dev Stores up to 5 snapshots of balances
+contract SnapshotToken {
+    string public name;
+    string public symbol;
+    uint8 public decimals;
+    uint128 public totalSupply;
+    address public owner;
+    uint128 public ownerBalance;
+
+    // Snapshot storage (up to 5 snapshots)
+    uint128 public snapshotCount;
+    uint128 public snapshot1Balance;
+    uint128 public snapshot2Balance;
+    uint128 public snapshot3Balance;
+    uint128 public snapshot4Balance;
+    uint128 public snapshot5Balance;
+    uint128 public snapshot1Id;
+    uint128 public snapshot2Id;
+    uint128 public snapshot3Id;
+    uint128 public snapshot4Id;
+    uint128 public snapshot5Id;
+
+    constructor(string memory _name, string memory _symbol, uint128 _initialSupply) {
+        name = _name;
+        symbol = _symbol;
+        decimals = 7;
+        totalSupply = _initialSupply;
+        owner = msg.sender;
+        ownerBalance = _initialSupply;
+        snapshotCount = 0;
+    }
+
+    function snapshot() public returns (uint128) {
+        if (msg.sender != owner) {
+            return 0;
+        }
+        if (snapshotCount >= 5) {
+            return 0;
+        }
+        snapshotCount += 1;
+        if (snapshotCount == 1) { snapshot1Balance = ownerBalance; snapshot1Id = snapshotCount; }
+        else if (snapshotCount == 2) { snapshot2Balance = ownerBalance; snapshot2Id = snapshotCount; }
+        else if (snapshotCount == 3) { snapshot3Balance = ownerBalance; snapshot3Id = snapshotCount; }
+        else if (snapshotCount == 4) { snapshot4Balance = ownerBalance; snapshot4Id = snapshotCount; }
+        else if (snapshotCount == 5) { snapshot5Balance = ownerBalance; snapshot5Id = snapshotCount; }
+        return snapshotCount;
+    }
+
+    function balanceOfAt(uint128 snapshotId) public view returns (uint128) {
+        if (snapshotId == 1) return snapshot1Balance;
+        if (snapshotId == 2) return snapshot2Balance;
+        if (snapshotId == 3) return snapshot3Balance;
+        if (snapshotId == 4) return snapshot4Balance;
+        if (snapshotId == 5) return snapshot5Balance;
+        return 0;
+    }
+
+    function mint(uint128 amount) public {
+        if (msg.sender != owner) { return; }
+        totalSupply += amount;
+        ownerBalance += amount;
+    }
+
+    function burn(uint128 amount) public {
+        if (ownerBalance < amount) { return; }
+        ownerBalance -= amount;
+        totalSupply -= amount;
+    }
+
+    function balanceOf() public view returns (uint128) {
+        return ownerBalance;
+    }
+}
+`
+    },
+    "oz-erc20-votes": {
+        name: "ERC20 Votes",
+        description: "Token with voting power",
+        defaultFileName: "VotesToken.sol",
+        category: "Tokens",
+        content: `// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+/// @title ERC20 Votes (Soroban-compatible)
+/// @notice Token with delegatable voting power
+/// @dev Simplified delegation model
+contract VotesToken {
+    string public name;
+    string public symbol;
+    uint8 public decimals;
+    uint128 public totalSupply;
+    address public owner;
+    uint128 public ownerBalance;
+
+    // Voting power tracking
+    address public ownerDelegate;
+    uint128 public ownerVotingPower;
+    bool public hasDelegated;
+
+    constructor(string memory _name, string memory _symbol, uint128 _initialSupply) {
+        name = _name;
+        symbol = _symbol;
+        decimals = 7;
+        totalSupply = _initialSupply;
+        owner = msg.sender;
+        ownerBalance = _initialSupply;
+        ownerDelegate = msg.sender;
+        ownerVotingPower = _initialSupply;
+        hasDelegated = false;
+    }
+
+    function delegate(address delegatee) public {
+        ownerDelegate = delegatee;
+        hasDelegated = true;
+    }
+
+    function getVotes() public view returns (uint128) {
+        return ownerVotingPower;
+    }
+
+    function delegates() public view returns (address) {
+        return ownerDelegate;
+    }
+
+    function mint(uint128 amount) public {
+        if (msg.sender != owner) { return; }
+        totalSupply += amount;
+        ownerBalance += amount;
+        ownerVotingPower += amount;
+    }
+
+    function burn(uint128 amount) public {
+        if (ownerBalance < amount) { return; }
+        ownerBalance -= amount;
+        totalSupply -= amount;
+        if (ownerVotingPower >= amount) {
+            ownerVotingPower -= amount;
+        }
+    }
+
+    function balanceOf() public view returns (uint128) {
+        return ownerBalance;
+    }
+}
+`
+    },
+    "oz-erc20-flashmint": {
+        name: "ERC20 Flash Mint",
+        description: "Token with flash loan support",
+        defaultFileName: "FlashToken.sol",
+        category: "Tokens",
+        content: `// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+/// @title ERC20 Flash Mint (Soroban-compatible)
+/// @notice Token supporting flash loans
+/// @dev Simplified flash loan mechanism
+contract FlashToken {
+    string public name;
+    string public symbol;
+    uint8 public decimals;
+    uint128 public totalSupply;
+    address public owner;
+    uint128 public ownerBalance;
+
+    // Flash loan state
+    uint128 public flashFee;
+    uint128 public maxFlashLoan;
+    bool public flashLoanActive;
+    uint128 public totalFlashLoaned;
+    uint128 public totalFeesCollected;
+
+    constructor(string memory _name, string memory _symbol, uint128 _initialSupply, uint128 _fee) {
+        name = _name;
+        symbol = _symbol;
+        decimals = 7;
+        totalSupply = _initialSupply;
+        owner = msg.sender;
+        ownerBalance = _initialSupply;
+        flashFee = _fee;
+        maxFlashLoan = _initialSupply;
+        flashLoanActive = false;
+        totalFlashLoaned = 0;
+        totalFeesCollected = 0;
+    }
+
+    function getMaxFlashLoan() public view returns (uint128) {
+        return maxFlashLoan;
+    }
+
+    function getFlashFee(uint128 amount) public view returns (uint128) {
+        return (amount * flashFee) / 10000;
+    }
+
+    function initiateFlashLoan(uint128 amount) public returns (bool) {
+        if (flashLoanActive) { return false; }
+        if (amount > maxFlashLoan) { return false; }
+        flashLoanActive = true;
+        totalFlashLoaned += amount;
+        return true;
+    }
+
+    function repayFlashLoan(uint128 amount, uint128 fee) public returns (bool) {
+        if (!flashLoanActive) { return false; }
+        flashLoanActive = false;
+        totalFeesCollected += fee;
+        ownerBalance += fee;
+        totalSupply += fee;
+        return true;
+    }
+
+    function mint(uint128 amount) public {
+        if (msg.sender != owner) { return; }
+        totalSupply += amount;
+        ownerBalance += amount;
+        maxFlashLoan = totalSupply;
+    }
+
+    function balanceOf() public view returns (uint128) {
+        return ownerBalance;
+    }
+}
+`
+    },
+    "oz-erc20-wrapper": {
+        name: "ERC20 Wrapper",
+        description: "Wrapped token standard",
+        defaultFileName: "WrappedToken.sol",
+        category: "Tokens",
+        content: `// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+/// @title ERC20 Wrapper (Soroban-compatible)
+/// @notice Wraps underlying token 1:1
+/// @dev Simplified wrapper without actual transfer
+contract WrappedToken {
+    string public name;
+    string public symbol;
+    uint8 public decimals;
+    uint128 public totalSupply;
+    address public owner;
+    uint128 public ownerBalance;
+
+    // Wrapper state
+    string public underlyingName;
+    uint128 public totalDeposited;
+    uint128 public totalWithdrawn;
+
+    constructor(string memory _name, string memory _symbol, string memory _underlyingName) {
+        name = _name;
+        symbol = _symbol;
+        underlyingName = _underlyingName;
+        decimals = 7;
+        totalSupply = 0;
+        owner = msg.sender;
+        ownerBalance = 0;
+        totalDeposited = 0;
+        totalWithdrawn = 0;
+    }
+
+    function depositFor(uint128 amount) public returns (bool) {
+        totalSupply += amount;
+        ownerBalance += amount;
+        totalDeposited += amount;
+        return true;
+    }
+
+    function withdrawTo(uint128 amount) public returns (bool) {
+        if (ownerBalance < amount) { return false; }
+        ownerBalance -= amount;
+        totalSupply -= amount;
+        totalWithdrawn += amount;
+        return true;
+    }
+
+    function balanceOf() public view returns (uint128) {
+        return ownerBalance;
+    }
+
+    function getUnderlying() public view returns (string memory) {
+        return underlyingName;
+    }
+}
+`
+    },
+    "oz-erc721-royalty": {
+        name: "ERC721 Royalty",
+        description: "NFT with EIP-2981 royalties",
+        defaultFileName: "RoyaltyNFT.sol",
+        category: "Tokens",
+        content: `// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+/// @title ERC721 Royalty (Soroban-compatible)
+/// @notice NFT with EIP-2981 royalty support
+/// @dev Default royalty for all tokens
+contract RoyaltyNFT {
+    string public name;
+    string public symbol;
+    address public owner;
+    uint128 public totalSupply;
+    uint128 public nextTokenId;
+    uint128 public ownerBalance;
+
+    // Royalty info (basis points, e.g., 250 = 2.5%)
+    address public royaltyReceiver;
+    uint128 public royaltyBps;
+
+    constructor(string memory _name, string memory _symbol, uint128 _royaltyBps) {
+        name = _name;
+        symbol = _symbol;
+        owner = msg.sender;
+        royaltyReceiver = msg.sender;
+        royaltyBps = _royaltyBps;
+        totalSupply = 0;
+        nextTokenId = 1;
+        ownerBalance = 0;
+    }
+
+    function mint() public returns (uint128) {
+        if (msg.sender != owner) { return 0; }
+        uint128 tokenId = nextTokenId;
+        nextTokenId += 1;
+        totalSupply += 1;
+        ownerBalance += 1;
+        return tokenId;
+    }
+
+    function royaltyInfo(uint128 salePrice) public view returns (address, uint128) {
+        uint128 royaltyAmount = (salePrice * royaltyBps) / 10000;
+        return (royaltyReceiver, royaltyAmount);
+    }
+
+    function setRoyaltyInfo(address receiver, uint128 bps) public {
+        if (msg.sender != owner) { return; }
+        royaltyReceiver = receiver;
+        royaltyBps = bps;
+    }
+
+    function balanceOf() public view returns (uint128) {
+        return ownerBalance;
+    }
+
+    function supportsInterface() public pure returns (bool) {
+        return true; // Supports EIP-2981
+    }
+}
+`
+    },
+    "oz-erc721-votes": {
+        name: "ERC721 Votes",
+        description: "NFT with voting power",
+        defaultFileName: "VotingNFT.sol",
+        category: "Tokens",
+        content: `// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+/// @title ERC721 Votes (Soroban-compatible)
+/// @notice NFT with delegatable voting power
+/// @dev Each NFT = 1 vote
+contract VotingNFT {
+    string public name;
+    string public symbol;
+    address public owner;
+    uint128 public totalSupply;
+    uint128 public nextTokenId;
+    uint128 public ownerBalance;
+
+    // Voting
+    address public ownerDelegate;
+    uint128 public ownerVotingPower;
+    bool public hasDelegated;
+
+    constructor(string memory _name, string memory _symbol) {
+        name = _name;
+        symbol = _symbol;
+        owner = msg.sender;
+        totalSupply = 0;
+        nextTokenId = 1;
+        ownerBalance = 0;
+        ownerDelegate = msg.sender;
+        ownerVotingPower = 0;
+        hasDelegated = false;
+    }
+
+    function mint() public returns (uint128) {
+        if (msg.sender != owner) { return 0; }
+        uint128 tokenId = nextTokenId;
+        nextTokenId += 1;
+        totalSupply += 1;
+        ownerBalance += 1;
+        ownerVotingPower += 1;
+        return tokenId;
+    }
+
+    function delegate(address delegatee) public {
+        ownerDelegate = delegatee;
+        hasDelegated = true;
+    }
+
+    function getVotes() public view returns (uint128) {
+        return ownerVotingPower;
+    }
+
+    function delegates() public view returns (address) {
+        return ownerDelegate;
+    }
+
+    function burn() public {
+        if (ownerBalance == 0) { return; }
+        ownerBalance -= 1;
+        totalSupply -= 1;
+        if (ownerVotingPower > 0) {
+            ownerVotingPower -= 1;
+        }
+    }
+
+    function balanceOf() public view returns (uint128) {
+        return ownerBalance;
+    }
+}
+`
+    },
+    "oz-erc1155-uri": {
+        name: "ERC1155 URI Storage",
+        description: "Multi-token with per-token URIs",
+        defaultFileName: "URIMultiToken.sol",
+        category: "Tokens",
+        content: `// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+/// @title ERC1155 URI Storage (Soroban-compatible)
+/// @notice Multi-token with per-token URI storage
+/// @dev Explicit URI slots for token types 0-4
+contract URIMultiToken {
+    string public name;
+    address public owner;
+
+    // Balances
+    uint128 public balance0;
+    uint128 public balance1;
+    uint128 public balance2;
+    uint128 public balance3;
+    uint128 public balance4;
+
+    // URIs
+    string public uri0;
+    string public uri1;
+    string public uri2;
+    string public uri3;
+    string public uri4;
+
+    constructor(string memory _name) {
+        name = _name;
+        owner = msg.sender;
+        balance0 = 0;
+        balance1 = 0;
+        balance2 = 0;
+        balance3 = 0;
+        balance4 = 0;
+        uri0 = "";
+        uri1 = "";
+        uri2 = "";
+        uri3 = "";
+        uri4 = "";
+    }
+
+    function setURI(uint128 id, string memory _uri) public {
+        if (msg.sender != owner) { return; }
+        if (id == 0) uri0 = _uri;
+        else if (id == 1) uri1 = _uri;
+        else if (id == 2) uri2 = _uri;
+        else if (id == 3) uri3 = _uri;
+        else if (id == 4) uri4 = _uri;
+    }
+
+    function uri(uint128 id) public view returns (string memory) {
+        if (id == 0) return uri0;
+        if (id == 1) return uri1;
+        if (id == 2) return uri2;
+        if (id == 3) return uri3;
+        if (id == 4) return uri4;
+        return "";
+    }
+
+    function mint(uint128 id, uint128 amount) public {
+        if (msg.sender != owner) { return; }
+        if (id == 0) balance0 += amount;
+        else if (id == 1) balance1 += amount;
+        else if (id == 2) balance2 += amount;
+        else if (id == 3) balance3 += amount;
+        else if (id == 4) balance4 += amount;
+    }
+
+    function balanceOf(uint128 id) public view returns (uint128) {
+        if (id == 0) return balance0;
+        if (id == 1) return balance1;
+        if (id == 2) return balance2;
+        if (id == 3) return balance3;
+        if (id == 4) return balance4;
+        return 0;
+    }
+}
+`
+    },
+    "oz-erc4626": {
+        name: "ERC4626 Vault",
+        description: "Tokenized vault standard",
+        defaultFileName: "TokenVault.sol",
+        category: "Tokens",
+        content: `// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+/// @title ERC4626 Vault (Soroban-compatible)
+/// @notice Tokenized vault for yield strategies
+/// @dev Simplified vault with share/asset conversion
+contract TokenVault {
+    string public name;
+    string public symbol;
+    uint8 public decimals;
+    address public owner;
+
+    // Vault state
+    uint128 public totalAssets;
+    uint128 public totalShares;
+    uint128 public ownerShares;
+    uint128 public ownerAssets;
+
+    constructor(string memory _name, string memory _symbol) {
+        name = _name;
+        symbol = _symbol;
+        decimals = 7;
+        owner = msg.sender;
+        totalAssets = 0;
+        totalShares = 0;
+        ownerShares = 0;
+        ownerAssets = 0;
+    }
+
+    function deposit(uint128 assets) public returns (uint128 shares) {
+        if (totalShares == 0) {
+            shares = assets;
+        } else {
+            shares = (assets * totalShares) / totalAssets;
+        }
+        totalAssets += assets;
+        totalShares += shares;
+        ownerShares += shares;
+        ownerAssets += assets;
+        return shares;
+    }
+
+    function withdraw(uint128 assets) public returns (uint128 shares) {
+        if (totalAssets == 0) { return 0; }
+        shares = (assets * totalShares) / totalAssets;
+        if (ownerShares < shares) { return 0; }
+        if (ownerAssets < assets) { return 0; }
+        totalAssets -= assets;
+        totalShares -= shares;
+        ownerShares -= shares;
+        ownerAssets -= assets;
+        return shares;
+    }
+
+    function redeem(uint128 shares) public returns (uint128 assets) {
+        if (totalShares == 0) { return 0; }
+        if (ownerShares < shares) { return 0; }
+        assets = (shares * totalAssets) / totalShares;
+        totalAssets -= assets;
+        totalShares -= shares;
+        ownerShares -= shares;
+        ownerAssets -= assets;
+        return assets;
+    }
+
+    function convertToShares(uint128 assets) public view returns (uint128) {
+        if (totalAssets == 0) { return assets; }
+        return (assets * totalShares) / totalAssets;
+    }
+
+    function convertToAssets(uint128 shares) public view returns (uint128) {
+        if (totalShares == 0) { return shares; }
+        return (shares * totalAssets) / totalShares;
+    }
+
+    function balanceOf() public view returns (uint128) {
+        return ownerShares;
+    }
+
+    function maxDeposit() public pure returns (uint128) {
+        return type(uint128).max;
+    }
+}
+`
+    },
+    "oz-ownable2step": {
+        name: "Ownable 2-Step",
+        description: "Two-step ownership transfer",
+        defaultFileName: "Ownable2Step.sol",
+        category: "Access",
+        content: `// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+/// @title Ownable 2-Step (Soroban-compatible)
+/// @notice Ownership with pending acceptance
+/// @dev Prevents accidental ownership transfers
+contract Ownable2Step {
+    address public owner;
+    address public pendingOwner;
+
+    constructor() {
+        owner = msg.sender;
+        pendingOwner = address(0);
+    }
+
+    function transferOwnership(address newOwner) public {
+        if (msg.sender != owner) { return; }
+        pendingOwner = newOwner;
+    }
+
+    function acceptOwnership() public {
+        if (msg.sender != pendingOwner) { return; }
+        owner = pendingOwner;
+        pendingOwner = address(0);
+    }
+
+    function renounceOwnership() public {
+        if (msg.sender != owner) { return; }
+        owner = address(0);
+        pendingOwner = address(0);
+    }
+
+    function getOwner() public view returns (address) {
+        return owner;
+    }
+
+    function getPendingOwner() public view returns (address) {
+        return pendingOwner;
+    }
+}
+`
+    },
+    "oz-access-enumerable": {
+        name: "Access Enumerable",
+        description: "Enumerable role members",
+        defaultFileName: "EnumerableAccess.sol",
+        category: "Access",
+        content: `// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+/// @title Access Control Enumerable (Soroban-compatible)
+/// @notice Role-based access with member enumeration
+/// @dev Tracks up to 3 members per role
+contract EnumerableAccess {
+    address public admin;
+
+    // Admin role members
+    address public adminMember0;
+    address public adminMember1;
+    address public adminMember2;
+    uint128 public adminCount;
+
+    // Minter role members
+    address public minterMember0;
+    address public minterMember1;
+    address public minterMember2;
+    uint128 public minterCount;
+
+    constructor() {
+        admin = msg.sender;
+        adminMember0 = msg.sender;
+        adminCount = 1;
+        minterCount = 0;
+    }
+
+    function grantAdminRole(address account) public {
+        if (msg.sender != admin) { return; }
+        if (adminCount >= 3) { return; }
+        if (adminCount == 0) adminMember0 = account;
+        else if (adminCount == 1) adminMember1 = account;
+        else if (adminCount == 2) adminMember2 = account;
+        adminCount += 1;
+    }
+
+    function grantMinterRole(address account) public {
+        if (msg.sender != admin) { return; }
+        if (minterCount >= 3) { return; }
+        if (minterCount == 0) minterMember0 = account;
+        else if (minterCount == 1) minterMember1 = account;
+        else if (minterCount == 2) minterMember2 = account;
+        minterCount += 1;
+    }
+
+    function getAdminMember(uint128 index) public view returns (address) {
+        if (index == 0) return adminMember0;
+        if (index == 1) return adminMember1;
+        if (index == 2) return adminMember2;
+        return address(0);
+    }
+
+    function getMinterMember(uint128 index) public view returns (address) {
+        if (index == 0) return minterMember0;
+        if (index == 1) return minterMember1;
+        if (index == 2) return minterMember2;
+        return address(0);
+    }
+
+    function getAdminCount() public view returns (uint128) {
+        return adminCount;
+    }
+
+    function getMinterCount() public view returns (uint128) {
+        return minterCount;
+    }
+}
+`
+    },
+    "oz-votes": {
+        name: "Votes",
+        description: "Voting weight tracking",
+        defaultFileName: "Votes.sol",
+        category: "Access",
+        content: `// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+/// @title Votes (Soroban-compatible)
+/// @notice Abstract voting weight with checkpoints
+/// @dev Simplified checkpoint system
+contract Votes {
+    address public owner;
+
+    // Current voting state
+    uint128 public totalVotingPower;
+    address public delegate1;
+    address public delegate2;
+    address public delegate3;
+    uint128 public power1;
+    uint128 public power2;
+    uint128 public power3;
+
+    // Checkpoints (simplified - 3 historical values)
+    uint128 public checkpoint1Block;
+    uint128 public checkpoint1Power;
+    uint128 public checkpoint2Block;
+    uint128 public checkpoint2Power;
+    uint128 public checkpoint3Block;
+    uint128 public checkpoint3Power;
+    uint128 public checkpointCount;
+
+    constructor() {
+        owner = msg.sender;
+        totalVotingPower = 0;
+        checkpointCount = 0;
+    }
+
+    function delegate(address delegatee, uint128 power) public {
+        if (msg.sender != owner) { return; }
+        if (power1 == 0) { delegate1 = delegatee; power1 = power; }
+        else if (power2 == 0) { delegate2 = delegatee; power2 = power; }
+        else if (power3 == 0) { delegate3 = delegatee; power3 = power; }
+        totalVotingPower += power;
+    }
+
+    function createCheckpoint() public {
+        if (msg.sender != owner) { return; }
+        if (checkpointCount >= 3) { return; }
+        checkpointCount += 1;
+        if (checkpointCount == 1) {
+            checkpoint1Block = uint128(block.number);
+            checkpoint1Power = totalVotingPower;
+        } else if (checkpointCount == 2) {
+            checkpoint2Block = uint128(block.number);
+            checkpoint2Power = totalVotingPower;
+        } else if (checkpointCount == 3) {
+            checkpoint3Block = uint128(block.number);
+            checkpoint3Power = totalVotingPower;
+        }
+    }
+
+    function getPastVotes(uint128 blockNumber) public view returns (uint128) {
+        if (checkpointCount >= 3 && blockNumber >= checkpoint3Block) return checkpoint3Power;
+        if (checkpointCount >= 2 && blockNumber >= checkpoint2Block) return checkpoint2Power;
+        if (checkpointCount >= 1 && blockNumber >= checkpoint1Block) return checkpoint1Power;
+        return 0;
+    }
+
+    function getVotes(address account) public view returns (uint128) {
+        if (account == delegate1) return power1;
+        if (account == delegate2) return power2;
+        if (account == delegate3) return power3;
+        return 0;
+    }
+}
+`
+    },
+    "oz-pull-payment": {
+        name: "Pull Payment",
+        description: "Async pull payment pattern",
+        defaultFileName: "PullPayment.sol",
+        category: "Security",
+        content: `// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+/// @title Pull Payment (Soroban-compatible)
+/// @notice Async payment withdrawal pattern
+/// @dev Payees withdraw rather than receive
+contract PullPayment {
+    address public owner;
+
+    // Escrow balances for up to 5 payees
+    address public payee0;
+    address public payee1;
+    address public payee2;
+    address public payee3;
+    address public payee4;
+    uint128 public owed0;
+    uint128 public owed1;
+    uint128 public owed2;
+    uint128 public owed3;
+    uint128 public owed4;
+    uint128 public totalOwed;
+
+    constructor() {
+        owner = msg.sender;
+        totalOwed = 0;
+    }
+
+    function asyncTransfer(address dest, uint128 amount) public {
+        if (msg.sender != owner) { return; }
+        if (owed0 == 0 && payee0 == address(0)) { payee0 = dest; owed0 = amount; }
+        else if (payee0 == dest) { owed0 += amount; }
+        else if (owed1 == 0 && payee1 == address(0)) { payee1 = dest; owed1 = amount; }
+        else if (payee1 == dest) { owed1 += amount; }
+        else if (owed2 == 0 && payee2 == address(0)) { payee2 = dest; owed2 = amount; }
+        else if (payee2 == dest) { owed2 += amount; }
+        else if (owed3 == 0 && payee3 == address(0)) { payee3 = dest; owed3 = amount; }
+        else if (payee3 == dest) { owed3 += amount; }
+        else if (owed4 == 0 && payee4 == address(0)) { payee4 = dest; owed4 = amount; }
+        else if (payee4 == dest) { owed4 += amount; }
+        totalOwed += amount;
+    }
+
+    function withdrawPayments(address payee) public returns (uint128) {
+        uint128 amount = 0;
+        if (payee == payee0) { amount = owed0; owed0 = 0; }
+        else if (payee == payee1) { amount = owed1; owed1 = 0; }
+        else if (payee == payee2) { amount = owed2; owed2 = 0; }
+        else if (payee == payee3) { amount = owed3; owed3 = 0; }
+        else if (payee == payee4) { amount = owed4; owed4 = 0; }
+        totalOwed -= amount;
+        return amount;
+    }
+
+    function payments(address payee) public view returns (uint128) {
+        if (payee == payee0) return owed0;
+        if (payee == payee1) return owed1;
+        if (payee == payee2) return owed2;
+        if (payee == payee3) return owed3;
+        if (payee == payee4) return owed4;
+        return 0;
+    }
+}
+`
+    },
+    "oz-counters": {
+        name: "Counters",
+        description: "Incrementing ID generator",
+        defaultFileName: "Counters.sol",
+        category: "Tokens",
+        content: `// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+/// @title Counters (Soroban-compatible)
+/// @notice Simple incrementing counters for IDs
+/// @dev Multiple named counters
+contract Counters {
+    address public owner;
+
+    // Multiple counters
+    uint128 public counter1;
+    uint128 public counter2;
+    uint128 public counter3;
+    string public counter1Name;
+    string public counter2Name;
+    string public counter3Name;
+
+    constructor() {
+        owner = msg.sender;
+        counter1 = 0;
+        counter2 = 0;
+        counter3 = 0;
+        counter1Name = "default";
+        counter2Name = "";
+        counter3Name = "";
+    }
+
+    function setCounterName(uint128 counterId, string memory name) public {
+        if (msg.sender != owner) { return; }
+        if (counterId == 1) counter1Name = name;
+        else if (counterId == 2) counter2Name = name;
+        else if (counterId == 3) counter3Name = name;
+    }
+
+    function current(uint128 counterId) public view returns (uint128) {
+        if (counterId == 1) return counter1;
+        if (counterId == 2) return counter2;
+        if (counterId == 3) return counter3;
+        return 0;
+    }
+
+    function increment(uint128 counterId) public returns (uint128) {
+        if (counterId == 1) { counter1 += 1; return counter1; }
+        if (counterId == 2) { counter2 += 1; return counter2; }
+        if (counterId == 3) { counter3 += 1; return counter3; }
+        return 0;
+    }
+
+    function decrement(uint128 counterId) public returns (uint128) {
+        if (counterId == 1 && counter1 > 0) { counter1 -= 1; return counter1; }
+        if (counterId == 2 && counter2 > 0) { counter2 -= 1; return counter2; }
+        if (counterId == 3 && counter3 > 0) { counter3 -= 1; return counter3; }
+        return 0;
+    }
+
+    function reset(uint128 counterId) public {
+        if (msg.sender != owner) { return; }
+        if (counterId == 1) counter1 = 0;
+        else if (counterId == 2) counter2 = 0;
+        else if (counterId == 3) counter3 = 0;
+    }
+}
+`
+    },
+    "oz-multicall": {
+        name: "Multicall",
+        description: "Batch multiple calls",
+        defaultFileName: "Multicall.sol",
+        category: "Tokens",
+        content: `// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+/// @title Multicall (Soroban-compatible)
+/// @notice Batch multiple operations in one call
+/// @dev Simplified multicall with preset operations
+contract Multicall {
+    address public owner;
+
+    // State that can be modified in batch
+    uint128 public value1;
+    uint128 public value2;
+    uint128 public value3;
+    string public message;
+    bool public flag;
+
+    constructor() {
+        owner = msg.sender;
+        value1 = 0;
+        value2 = 0;
+        value3 = 0;
+        message = "";
+        flag = false;
+    }
+
+    function setValue1(uint128 v) public {
+        value1 = v;
+    }
+
+    function setValue2(uint128 v) public {
+        value2 = v;
+    }
+
+    function setValue3(uint128 v) public {
+        value3 = v;
+    }
+
+    function setMessage(string memory m) public {
+        message = m;
+    }
+
+    function setFlag(bool f) public {
+        flag = f;
+    }
+
+    // Batch operations
+    function batchSetValues(uint128 v1, uint128 v2, uint128 v3) public {
+        value1 = v1;
+        value2 = v2;
+        value3 = v3;
+    }
+
+    function batchSetAll(uint128 v1, uint128 v2, uint128 v3, string memory m, bool f) public {
+        value1 = v1;
+        value2 = v2;
+        value3 = v3;
+        message = m;
+        flag = f;
+    }
+
+    function incrementAll(uint128 amount) public {
+        value1 += amount;
+        value2 += amount;
+        value3 += amount;
+    }
+
+    function resetAll() public {
+        if (msg.sender != owner) { return; }
+        value1 = 0;
+        value2 = 0;
+        value3 = 0;
+        message = "";
+        flag = false;
+    }
+
+    function getAll() public view returns (uint128, uint128, uint128, string memory, bool) {
+        return (value1, value2, value3, message, flag);
+    }
+}
+`
+    },
+    "oz-minimal-forwarder": {
+        name: "Minimal Forwarder",
+        description: "Meta-transaction forwarder",
+        defaultFileName: "MinimalForwarder.sol",
+        category: "Security",
+        content: `// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+/// @title Minimal Forwarder (Soroban-compatible)
+/// @notice Forward meta-transactions
+/// @dev Simplified forwarder with nonce tracking
+contract MinimalForwarder {
+    address public owner;
+
+    // Nonce tracking for up to 5 addresses
+    address public user0;
+    address public user1;
+    address public user2;
+    address public user3;
+    address public user4;
+    uint128 public nonce0;
+    uint128 public nonce1;
+    uint128 public nonce2;
+    uint128 public nonce3;
+    uint128 public nonce4;
+
+    // Forwarded call tracking
+    uint128 public totalForwarded;
+    uint128 public totalSuccessful;
+    uint128 public totalFailed;
+
+    constructor() {
+        owner = msg.sender;
+        totalForwarded = 0;
+        totalSuccessful = 0;
+        totalFailed = 0;
+    }
+
+    function getNonce(address from) public view returns (uint128) {
+        if (from == user0) return nonce0;
+        if (from == user1) return nonce1;
+        if (from == user2) return nonce2;
+        if (from == user3) return nonce3;
+        if (from == user4) return nonce4;
+        return 0;
+    }
+
+    function registerUser(address user) public {
+        if (msg.sender != owner) { return; }
+        if (user0 == address(0)) { user0 = user; return; }
+        if (user1 == address(0)) { user1 = user; return; }
+        if (user2 == address(0)) { user2 = user; return; }
+        if (user3 == address(0)) { user3 = user; return; }
+        if (user4 == address(0)) { user4 = user; return; }
+    }
+
+    function execute(address from, uint128 providedNonce) public returns (bool) {
+        uint128 currentNonce = getNonce(from);
+        if (providedNonce != currentNonce) {
+            totalFailed += 1;
+            return false;
+        }
+
+        // Increment nonce
+        if (from == user0) nonce0 += 1;
+        else if (from == user1) nonce1 += 1;
+        else if (from == user2) nonce2 += 1;
+        else if (from == user3) nonce3 += 1;
+        else if (from == user4) nonce4 += 1;
+
+        totalForwarded += 1;
+        totalSuccessful += 1;
+        return true;
+    }
+
+    function verify(address from, uint128 providedNonce) public view returns (bool) {
+        return getNonce(from) == providedNonce;
+    }
+
+    function getStats() public view returns (uint128, uint128, uint128) {
+        return (totalForwarded, totalSuccessful, totalFailed);
     }
 }
 `
@@ -299,6 +2925,7 @@ interface ProjectContextType {
     // File management
     createFile: (name: string, parentFolderId?: string, template?: SolidityTemplate) => void;
     createSolidityFile: (template: SolidityTemplate, parentFolderId?: string) => void;
+    createOpenZeppelinFile: (template: OpenZeppelinTemplate, parentFolderId?: string) => void;
     renameFile: (id: string, newName: string) => void;
     deleteFile: (id: string) => void;
     createFolder: (name: string, parentFolderId?: string) => void;
@@ -443,6 +3070,39 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         const templateData = SOLIDITY_TEMPLATES[template];
         createFile(templateData.defaultFileName, parentFolderId, template);
     }, [createFile]);
+
+    const createOpenZeppelinFile = useCallback((template: OpenZeppelinTemplate, parentFolderId?: string) => {
+        const templateData = OPENZEPPELIN_TEMPLATES[template];
+        const newFile: File = {
+            id: genId(),
+            name: templateData.defaultFileName,
+            type: "solidity" as FileType,
+            content: templateData.content,
+        };
+
+        // Reset build state for new file
+        setBuildStatus("idle");
+        setCompileResult(null);
+        setVerifyResult(null);
+        setDeployResult(null);
+
+        setProject((prev) => {
+            const newRoot = JSON.parse(JSON.stringify(prev.root));
+            const addToFolder = (folder: Folder): boolean => {
+                if (folder.id === (parentFolderId || "root")) {
+                    folder.files.push(newFile);
+                    return true;
+                }
+                for (const sub of folder.folders) {
+                    if (addToFolder(sub)) return true;
+                }
+                return false;
+            };
+            addToFolder(newRoot);
+            return { ...prev, root: newRoot };
+        });
+        setActiveFileId(newFile.id);
+    }, []);
 
     const renameFile = useCallback((id: string, newName: string) => {
         setProject((prev) => {
@@ -846,6 +3506,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         updateFileContent,
         createFile,
         createSolidityFile,
+        createOpenZeppelinFile,
         renameFile,
         deleteFile,
         createFolder,

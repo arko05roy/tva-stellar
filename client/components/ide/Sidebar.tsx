@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Folder, File, useProject, SOLIDITY_TEMPLATES, SolidityTemplate, ABIFunction, FunctionCallResult } from "./useProjectState";
+import { Folder, File, useProject, SOLIDITY_TEMPLATES, SolidityTemplate, OPENZEPPELIN_TEMPLATES, OpenZeppelinTemplate, ABIFunction, FunctionCallResult } from "./useProjectState";
 
 // ─── ICONS (Larger sizes) ─────────────────────────────────────────────────────
 
@@ -385,67 +385,12 @@ function FunctionCard({ fn, onCall }: FunctionCardProps) {
     );
 }
 
-// ─── TEMPLATE SELECTOR ────────────────────────────────────────────────────────
-
-interface TemplateSelectorProps {
-    onSelect: (template: SolidityTemplate) => void;
-    onClose: () => void;
-}
-
-function TemplateSelector({ onSelect, onClose }: TemplateSelectorProps) {
-    const ref = useRef<HTMLDivElement>(null);
-    useEffect(() => {
-        const handler = (e: MouseEvent) => {
-            if (ref.current && !ref.current.contains(e.target as Node)) onClose();
-        };
-        document.addEventListener("mousedown", handler);
-        return () => document.removeEventListener("mousedown", handler);
-    }, [onClose]);
-
-    const templates = Object.entries(SOLIDITY_TEMPLATES) as [SolidityTemplate, typeof SOLIDITY_TEMPLATES[SolidityTemplate]][];
-
-    return (
-        <motion.div
-            ref={ref}
-            initial={{ opacity: 0, y: -8, scale: 0.95 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -8, scale: 0.95 }}
-            transition={{ duration: 0.15 }}
-            className="absolute right-0 top-full mt-2 w-[220px] z-[100] bg-[#0a0a0a] border border-[#222] rounded-xl shadow-2xl shadow-black/60 overflow-hidden"
-        >
-            <div className="px-3 py-2 border-b border-[#1a1a1a] bg-[#050505]">
-                <span className="text-[10px] text-[#606060] uppercase tracking-wider font-semibold">New Solidity Contract</span>
-            </div>
-            <div className="max-h-[280px] overflow-y-auto py-1">
-                {templates.map(([key, template]) => (
-                    <motion.button
-                        key={key}
-                        onClick={() => { onSelect(key); onClose(); }}
-                        className="w-full text-left px-3 py-2.5 hover:bg-[#FFC800]/5 transition-colors"
-                        whileHover={{ x: 2 }}
-                    >
-                        <div className="flex items-center gap-2.5">
-                            <div className="w-7 h-7 rounded-lg bg-[#FFC800]/10 border border-[#FFC800]/20 flex items-center justify-center shrink-0">
-                                <span className="text-[#FFC800] text-[11px] font-bold">◆</span>
-                            </div>
-                            <div className="flex-1 min-w-0">
-                                <div className="text-[12px] text-[#c0c0c0] font-medium">{template.name}</div>
-                                <div className="text-[10px] text-[#505050]">{template.description}</div>
-                            </div>
-                        </div>
-                    </motion.button>
-                ))}
-            </div>
-        </motion.div>
-    );
-}
-
 // ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
 
 export default function Sidebar() {
     const {
         project, activeFileId, setActiveFileId,
-        createFile, createSolidityFile, renameFile, deleteFile, createFolder, deleteFolder,
+        createFile, createSolidityFile, createOpenZeppelinFile, renameFile, deleteFile, createFolder, deleteFolder,
         buildStatus, compileResult, verifyResult, deployResult,
         compile, verify, deploy,
         constructorArgs, setConstructorArgs, constructorInputs,
@@ -461,10 +406,31 @@ export default function Sidebar() {
     const [creatingFolder, setCreatingFolder] = useState<string | null>(null);
     const [renamingId, setRenamingId] = useState<string | null>(null);
     const [copied, setCopied] = useState(false);
-    const [showTemplateSelector, setShowTemplateSelector] = useState(false);
+
+    // Main sidebar tab state
+    const [sidebarTab, setSidebarTab] = useState<"files" | "openzeppelin">("files");
+    const [expandedOZCategories, setExpandedOZCategories] = useState<Set<string>>(new Set(["Tokens"]));
 
     // Split View State
     const [bottomPanelHeight, setBottomPanelHeight] = useState("45%");
+
+    // Group OpenZeppelin templates by category
+    const ozTemplates = Object.entries(OPENZEPPELIN_TEMPLATES) as [OpenZeppelinTemplate, typeof OPENZEPPELIN_TEMPLATES[OpenZeppelinTemplate]][];
+    const ozByCategory = ozTemplates.reduce((acc, [key, template]) => {
+        const cat = template.category;
+        if (!acc[cat]) acc[cat] = [];
+        acc[cat].push([key, template] as [OpenZeppelinTemplate, typeof template]);
+        return acc;
+    }, {} as Record<string, [OpenZeppelinTemplate, typeof OPENZEPPELIN_TEMPLATES[OpenZeppelinTemplate]][]>);
+
+    const toggleOZCategory = (category: string) => {
+        setExpandedOZCategories((prev) => {
+            const next = new Set(prev);
+            if (next.has(category)) next.delete(category);
+            else next.add(category);
+            return next;
+        });
+    };
 
     const toggleFolder = (id: string) => {
         setExpandedFolders((prev) => {
@@ -753,80 +719,261 @@ export default function Sidebar() {
                 <div className="absolute right-0 top-0 bottom-0 w-[1px] bg-gradient-to-b from-[#FFC800]/15 via-[#1a1a1a] to-transparent" />
             </div>
 
-            {/* ─── TOP SECTION: FILES ────────────────────────────────────────── */}
-            <div className="flex-1 flex flex-col min-h-0 bg-gradient-to-b from-[#050505] to-[#020202] z-10" style={{ height: `calc(100% - ${bottomPanelHeight})` }}>
-                {/* Files Header */}
-                <div className="relative h-14 flex items-center justify-between px-4 border-b border-[#151515] shrink-0">
-                    <div className="absolute bottom-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-[#FFC800]/20 to-transparent" />
-                    <span className="text-[12px] font-semibold text-[#606060] uppercase tracking-[0.15em]">
-                        Files
-                    </span>
-                    <div className="flex items-center gap-1">
-                        {/* New Solidity Contract */}
-                        <div className="relative">
-                            <motion.button
-                                onClick={() => setShowTemplateSelector(!showTemplateSelector)}
-                                className="w-7 h-7 flex items-center justify-center rounded-lg text-[#FFC800] bg-[#FFC800]/10 hover:bg-[#FFC800]/20 transition-colors"
-                                whileHover={{ scale: 1.05 }}
-                                whileTap={{ scale: 0.95 }}
-                                title="New Solidity Contract"
-                            >
-                                <span className="text-[12px] font-bold">◆</span>
-                            </motion.button>
-                            <AnimatePresence>
-                                {showTemplateSelector && (
-                                    <TemplateSelector
-                                        onSelect={(template) => createSolidityFile(template, "root")}
-                                        onClose={() => setShowTemplateSelector(false)}
-                                    />
-                                )}
-                            </AnimatePresence>
-                        </div>
-                        <motion.button
-                            onClick={() => setCreatingFile("root")}
-                            className="w-7 h-7 flex items-center justify-center rounded-lg text-[#505050] hover:text-[#FFC800] hover:bg-[#FFC800]/10 transition-colors"
-                            whileHover={{ scale: 1.05 }}
-                            whileTap={{ scale: 0.95 }}
-                            title="New file"
-                        >
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
-                                <path d="M14 2v6h6M12 18v-6M9 15h6" />
-                            </svg>
-                        </motion.button>
-                        <motion.button
-                            onClick={() => setCreatingFolder("root")}
-                            className="w-7 h-7 flex items-center justify-center rounded-lg text-[#505050] hover:text-[#FFC800] hover:bg-[#FFC800]/10 transition-colors"
-                            whileHover={{ scale: 1.05 }}
-                            whileTap={{ scale: 0.95 }}
-                            title="New folder"
-                        >
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z" />
-                                <path d="M12 11v6M9 14h6" />
-                            </svg>
-                        </motion.button>
-                    </div>
-                </div>
+            {/* ─── MAIN TAB NAVIGATION ────────────────────────────────────────── */}
+            <div className="flex border-b border-[#1a1a1a] bg-[#030303] shrink-0 z-10 relative">
+                {/* Subtle gradient accent */}
+                <div className="absolute bottom-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-[#FFC800]/10 to-transparent" />
 
-                {/* File Tree Content */}
-                <div
-                    className="flex-1 overflow-y-auto py-2 custom-scrollbar"
-                    onContextMenu={(e) => {
-                        if (e.target === e.currentTarget) {
-                            e.preventDefault();
-                            setContextMenu({
-                                x: e.clientX, y: e.clientY, onClose: () => setContextMenu(null),
-                                items: [
-                                    { label: "New File", action: () => setCreatingFile("root") },
-                                    { label: "New Folder", action: () => setCreatingFolder("root") },
-                                ]
-                            });
-                        }
-                    }}
+                <button
+                    onClick={() => setSidebarTab("files")}
+                    className={`flex-1 px-4 py-3.5 text-[11px] uppercase tracking-wider font-semibold transition-all flex items-center justify-center gap-2.5 relative ${
+                        sidebarTab === "files"
+                            ? "text-[#FFC800]"
+                            : "text-[#4A4A4A] hover:text-[#808080] hover:bg-[#ffffff]/[0.02]"
+                    }`}
                 >
-                    <RenderFolder folder={project.root} depth={0} />
-                </div>
+                    {sidebarTab === "files" && (
+                        <motion.div
+                            layoutId="activeTab"
+                            className="absolute bottom-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-[#FFC800] to-transparent"
+                            transition={{ duration: 0.2 }}
+                        />
+                    )}
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z" />
+                    </svg>
+                    My Files
+                </button>
+                <button
+                    onClick={() => setSidebarTab("openzeppelin")}
+                    className={`flex-1 px-4 py-3.5 text-[11px] uppercase tracking-wider font-semibold transition-all flex items-center justify-center gap-2.5 relative ${
+                        sidebarTab === "openzeppelin"
+                            ? "text-[#9B7FFF]"
+                            : "text-[#4A4A4A] hover:text-[#808080] hover:bg-[#ffffff]/[0.02]"
+                    }`}
+                >
+                    {sidebarTab === "openzeppelin" && (
+                        <motion.div
+                            layoutId="activeTab"
+                            className="absolute bottom-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-[#9B7FFF] to-transparent"
+                            transition={{ duration: 0.2 }}
+                        />
+                    )}
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                    </svg>
+                    OpenZeppelin
+                </button>
+            </div>
+
+            {/* ─── TOP SECTION: CONDITIONAL CONTENT ────────────────────────────────────────── */}
+            <div className="flex-1 flex flex-col min-h-0 bg-gradient-to-b from-[#050505] to-[#020202] z-10" style={{ height: `calc(100% - ${bottomPanelHeight})` }}>
+                {sidebarTab === "files" ? (
+                    <>
+                        {/* Files Sub-Header with actions */}
+                        <div className="relative h-10 flex items-center justify-between px-4 border-b border-[#151515] shrink-0">
+                            <span className="text-[10px] font-medium text-[#505050] uppercase tracking-wider">
+                                Project Files
+                            </span>
+                            <div className="flex items-center gap-1">
+                                <motion.button
+                                    onClick={() => setCreatingFile("root")}
+                                    className="w-6 h-6 flex items-center justify-center rounded-md text-[#505050] hover:text-[#FFC800] hover:bg-[#FFC800]/10 transition-colors"
+                                    whileHover={{ scale: 1.05 }}
+                                    whileTap={{ scale: 0.95 }}
+                                    title="New file"
+                                >
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                        <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
+                                        <path d="M14 2v6h6M12 18v-6M9 15h6" />
+                                    </svg>
+                                </motion.button>
+                                <motion.button
+                                    onClick={() => setCreatingFolder("root")}
+                                    className="w-6 h-6 flex items-center justify-center rounded-md text-[#505050] hover:text-[#FFC800] hover:bg-[#FFC800]/10 transition-colors"
+                                    whileHover={{ scale: 1.05 }}
+                                    whileTap={{ scale: 0.95 }}
+                                    title="New folder"
+                                >
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                        <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z" />
+                                        <path d="M12 11v6M9 14h6" />
+                                    </svg>
+                                </motion.button>
+                            </div>
+                        </div>
+
+                        {/* File Tree Content */}
+                        <div
+                            className="flex-1 overflow-y-auto py-2 custom-scrollbar"
+                            onContextMenu={(e) => {
+                                if (e.target === e.currentTarget) {
+                                    e.preventDefault();
+                                    setContextMenu({
+                                        x: e.clientX, y: e.clientY, onClose: () => setContextMenu(null),
+                                        items: [
+                                            { label: "New File", action: () => setCreatingFile("root") },
+                                            { label: "New Folder", action: () => setCreatingFolder("root") },
+                                        ]
+                                    });
+                                }
+                            }}
+                        >
+                            <RenderFolder folder={project.root} depth={0} />
+                        </div>
+                    </>
+                ) : (
+                    <>
+                        {/* OpenZeppelin Header - Design System Compliant */}
+                        <div className="relative px-5 py-4 border-b border-[#1a1a1a] shrink-0 bg-gradient-to-b from-[#0a0a0a] to-[#050505]">
+                            {/* Accent glow effect */}
+                            <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-[#9B7FFF]/40 to-transparent" />
+
+                            <div className="flex items-center gap-3 mb-2">
+                                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#9B7FFF]/20 to-[#9B7FFF]/5 border border-[#9B7FFF]/20 flex items-center justify-center">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9B7FFF" strokeWidth="1.5">
+                                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                                        <path d="M12 8v4M12 16h.01" stroke="#9B7FFF" strokeWidth="2" strokeLinecap="round" />
+                                    </svg>
+                                </div>
+                                <div>
+                                    <h3 className="text-[13px] font-semibold text-white tracking-tight">OpenZeppelin</h3>
+                                    <p className="text-[10px] text-[#B0B0B0]">Soroban-compatible contracts</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* OpenZeppelin Templates List - Refined Design */}
+                        <div className="flex-1 overflow-y-auto custom-scrollbar bg-[#000000]">
+                            {Object.entries(ozByCategory).map(([category, templates]) => (
+                                <div key={category}>
+                                    {/* Category Header */}
+                                    <button
+                                        onClick={() => toggleOZCategory(category)}
+                                        className="w-full flex items-center gap-3 px-5 py-3 bg-[#0a0a0a] hover:bg-[#111111] transition-all border-b border-[#1a1a1a] group"
+                                    >
+                                        <motion.div
+                                            animate={{ rotate: expandedOZCategories.has(category) ? 90 : 0 }}
+                                            transition={{ duration: 0.2, ease: [0.4, 0, 0.2, 1] }}
+                                            className="text-[#4A4A4A] group-hover:text-[#606060]"
+                                        >
+                                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                                <path d="M9 18l6-6-6-6" />
+                                            </svg>
+                                        </motion.div>
+                                        <div className={`w-6 h-6 rounded-md flex items-center justify-center transition-all ${
+                                            category === "Tokens"
+                                                ? "bg-[#FFC800]/10 group-hover:bg-[#FFC800]/20"
+                                                : category === "Access"
+                                                    ? "bg-[#9B7FFF]/10 group-hover:bg-[#9B7FFF]/20"
+                                                    : "bg-[#FFC800]/10 group-hover:bg-[#FFC800]/20"
+                                        }`}>
+                                            {category === "Tokens" && (
+                                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#FFC800" strokeWidth="2">
+                                                    <circle cx="12" cy="12" r="8" />
+                                                    <path d="M12 8v8M8 12h8" />
+                                                </svg>
+                                            )}
+                                            {category === "Access" && (
+                                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#9B7FFF" strokeWidth="2">
+                                                    <rect x="5" y="11" width="14" height="10" rx="2" />
+                                                    <path d="M8 11V7a4 4 0 018 0v4" />
+                                                </svg>
+                                            )}
+                                            {category === "Security" && (
+                                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#FFC800" strokeWidth="2">
+                                                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                                                </svg>
+                                            )}
+                                        </div>
+                                        <span className={`text-[11px] font-semibold uppercase tracking-wider transition-colors ${
+                                            category === "Tokens"
+                                                ? "text-[#FFC800]"
+                                                : category === "Access"
+                                                    ? "text-[#9B7FFF]"
+                                                    : "text-[#FFC800]"
+                                        }`}>
+                                            {category}
+                                        </span>
+                                        <span className="text-[10px] text-[#4A4A4A] ml-auto font-medium">{templates.length}</span>
+                                    </button>
+
+                                    {/* Category Items */}
+                                    <AnimatePresence>
+                                        {expandedOZCategories.has(category) && (
+                                            <motion.div
+                                                initial={{ height: 0, opacity: 0 }}
+                                                animate={{ height: "auto", opacity: 1 }}
+                                                exit={{ height: 0, opacity: 0 }}
+                                                transition={{ duration: 0.2 }}
+                                                className="overflow-hidden"
+                                            >
+                                                {templates.map(([key, template]) => (
+                                                    <motion.button
+                                                        key={key}
+                                                        onClick={() => {
+                                                            createOpenZeppelinFile(key, "root");
+                                                            setSidebarTab("files");
+                                                        }}
+                                                        className="w-full text-left px-5 py-3 hover:bg-[#FFC800]/[0.03] transition-all border-l-2 border-transparent hover:border-[#FFC800]/40 group"
+                                                        whileHover={{ x: 3 }}
+                                                        transition={{ duration: 0.15 }}
+                                                    >
+                                                        <div className="flex items-center gap-3 pl-3">
+                                                            <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-[#1a1a1a] to-[#0a0a0a] border border-[#2a2a2a] flex items-center justify-center shrink-0 group-hover:border-[#FFC800]/30 group-hover:from-[#FFC800]/5 group-hover:to-transparent transition-all">
+                                                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#B0B0B0" strokeWidth="1.5" className="group-hover:stroke-[#FFC800] transition-colors">
+                                                                    <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6z" />
+                                                                    <path d="M14 2v6h6" />
+                                                                </svg>
+                                                            </div>
+                                                            <div className="flex-1 min-w-0">
+                                                                <div className="text-[12px] text-[#B0B0B0] font-medium group-hover:text-white transition-colors">
+                                                                    {template.name}
+                                                                </div>
+                                                                <div className="text-[10px] text-[#4A4A4A] group-hover:text-[#606060] transition-colors">
+                                                                    {template.description}
+                                                                </div>
+                                                            </div>
+                                                            <motion.div
+                                                                className="opacity-0 group-hover:opacity-100 transition-all text-[#FFC800]"
+                                                                initial={{ x: -4 }}
+                                                                whileHover={{ x: 0 }}
+                                                            >
+                                                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                                                    <path d="M5 12h14M12 5l7 7-7 7" />
+                                                                </svg>
+                                                            </motion.div>
+                                                        </div>
+                                                    </motion.button>
+                                                ))}
+                                            </motion.div>
+                                        )}
+                                    </AnimatePresence>
+                                </div>
+                            ))}
+
+                            {/* Info Footer - Design System Compliant */}
+                            <div className="p-5 bg-gradient-to-b from-[#050505] to-[#000000]">
+                                <div className="p-4 rounded-xl bg-gradient-to-br from-[#9B7FFF]/[0.08] to-transparent border border-[#9B7FFF]/15">
+                                    <div className="flex items-start gap-3">
+                                        <div className="w-8 h-8 rounded-lg bg-[#9B7FFF]/10 flex items-center justify-center shrink-0">
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9B7FFF" strokeWidth="2">
+                                                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                                                <path d="M9 12l2 2 4-4" />
+                                            </svg>
+                                        </div>
+                                        <div>
+                                            <p className="text-[11px] text-[#9B7FFF] font-semibold mb-1">Soroban Compatible</p>
+                                            <p className="text-[10px] text-[#B0B0B0] leading-relaxed">
+                                                All templates optimized for Stellar Soroban. No mappings, explicit storage only.
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </>
+                )}
             </div>
 
             {/* ─── RESIZE HANDLE / DIVIDER ───────────────────────────────────── */}
