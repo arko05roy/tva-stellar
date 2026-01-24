@@ -59,6 +59,27 @@ export interface DeployResult {
     error?: string;
 }
 
+export interface ABIInput {
+    name: string;
+    type: string;
+}
+
+export interface ABIFunction {
+    name: string;
+    type: "function" | "constructor" | "event";
+    inputs: ABIInput[];
+    outputs?: ABIInput[];
+    stateMutability?: "pure" | "view" | "nonpayable" | "payable";
+}
+
+export interface FunctionCallResult {
+    success: boolean;
+    result?: any;
+    error?: string;
+    txHash?: string;
+    gasUsed?: string;
+}
+
 export type BuildStatus = "idle" | "compiling" | "compiled" | "verifying" | "verified" | "deploying" | "deployed" | "error";
 
 // --- Helper ---
@@ -76,6 +97,149 @@ let fileCounter = 10;
 function genId() {
     return `file-${Date.now()}-${fileCounter++}`;
 }
+
+// --- Solidity Templates ---
+
+export type SolidityTemplate = "blank" | "counter" | "greeter" | "erc20" | "storage";
+
+export const SOLIDITY_TEMPLATES: Record<SolidityTemplate, { name: string; description: string; defaultFileName: string; content: string }> = {
+    blank: {
+        name: "Blank Contract",
+        description: "Empty contract scaffold",
+        defaultFileName: "MyContract.sol",
+        content: `// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+contract MyContract {
+
+}
+`
+    },
+    counter: {
+        name: "Counter",
+        description: "Simple counter with increment/decrement",
+        defaultFileName: "Counter.sol",
+        content: `// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+contract Counter {
+    uint256 private count;
+
+    function increment() public {
+        count += 1;
+    }
+
+    function decrement() public {
+        require(count > 0, "Counter: cannot decrement below zero");
+        count -= 1;
+    }
+
+    function get() public view returns (uint256) {
+        return count;
+    }
+}
+`
+    },
+    greeter: {
+        name: "Greeter",
+        description: "Store and retrieve a greeting message",
+        defaultFileName: "Greeter.sol",
+        content: `// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+contract Greeter {
+    string private greeting;
+
+    constructor(string memory _greeting) {
+        greeting = _greeting;
+    }
+
+    function greet() public view returns (string memory) {
+        return greeting;
+    }
+
+    function setGreeting(string memory _greeting) public {
+        greeting = _greeting;
+    }
+}
+`
+    },
+    erc20: {
+        name: "ERC20 Token",
+        description: "Basic ERC20 token implementation",
+        defaultFileName: "Token.sol",
+        content: `// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+contract Token {
+    string public name;
+    string public symbol;
+    uint8 public decimals = 18;
+    uint256 public totalSupply;
+
+    mapping(address => uint256) public balanceOf;
+    mapping(address => mapping(address => uint256)) public allowance;
+
+    event Transfer(address indexed from, address indexed to, uint256 value);
+    event Approval(address indexed owner, address indexed spender, uint256 value);
+
+    constructor(string memory _name, string memory _symbol, uint256 _initialSupply) {
+        name = _name;
+        symbol = _symbol;
+        totalSupply = _initialSupply * 10 ** decimals;
+        balanceOf[msg.sender] = totalSupply;
+    }
+
+    function transfer(address to, uint256 amount) public returns (bool) {
+        require(balanceOf[msg.sender] >= amount, "Insufficient balance");
+        balanceOf[msg.sender] -= amount;
+        balanceOf[to] += amount;
+        emit Transfer(msg.sender, to, amount);
+        return true;
+    }
+
+    function approve(address spender, uint256 amount) public returns (bool) {
+        allowance[msg.sender][spender] = amount;
+        emit Approval(msg.sender, spender, amount);
+        return true;
+    }
+
+    function transferFrom(address from, address to, uint256 amount) public returns (bool) {
+        require(balanceOf[from] >= amount, "Insufficient balance");
+        require(allowance[from][msg.sender] >= amount, "Insufficient allowance");
+        balanceOf[from] -= amount;
+        balanceOf[to] += amount;
+        allowance[from][msg.sender] -= amount;
+        emit Transfer(from, to, amount);
+        return true;
+    }
+}
+`
+    },
+    storage: {
+        name: "Simple Storage",
+        description: "Store and retrieve a single value",
+        defaultFileName: "Storage.sol",
+        content: `// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+contract Storage {
+    uint256 private value;
+
+    event ValueChanged(uint256 newValue);
+
+    function store(uint256 _value) public {
+        value = _value;
+        emit ValueChanged(_value);
+    }
+
+    function retrieve() public view returns (uint256) {
+        return value;
+    }
+}
+`
+    }
+};
 
 // --- Initial Data ---
 
@@ -141,7 +305,8 @@ interface ProjectContextType {
     setActiveFileId: (id: string) => void;
     updateFileContent: (id: string, content: string) => void;
     // File management
-    createFile: (name: string, parentFolderId?: string) => void;
+    createFile: (name: string, parentFolderId?: string, template?: SolidityTemplate) => void;
+    createSolidityFile: (template: SolidityTemplate, parentFolderId?: string) => void;
     renameFile: (id: string, newName: string) => void;
     deleteFile: (id: string) => void;
     createFolder: (name: string, parentFolderId?: string) => void;
@@ -164,6 +329,9 @@ interface ProjectContextType {
     isWalletConnected: boolean;
     connectWallet: () => Promise<void>;
     disconnectWallet: () => void;
+    // Contract Interaction
+    callContractFunction: (functionName: string, args: Record<string, string>, isView: boolean) => Promise<FunctionCallResult>;
+    getContractFunctions: () => ABIFunction[];
 }
 
 const ProjectContext = createContext<ProjectContextType | undefined>(undefined);
@@ -219,14 +387,23 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
 
     // --- File Management ---
 
-    const createFile = useCallback((name: string, parentFolderId?: string) => {
+    const createFile = useCallback((name: string, parentFolderId?: string, template?: SolidityTemplate) => {
+        let content = "";
+        if (name.endsWith(".sol")) {
+            if (template && SOLIDITY_TEMPLATES[template]) {
+                content = SOLIDITY_TEMPLATES[template].content;
+                // Replace contract name with the file name
+                const contractName = name.replace(".sol", "");
+                content = content.replace(/contract \w+/g, `contract ${contractName}`);
+            } else {
+                content = `// SPDX-License-Identifier: MIT\npragma solidity ^0.8.0;\n\ncontract ${name.replace(".sol", "")} {\n    \n}\n`;
+            }
+        }
         const newFile: File = {
             id: genId(),
             name,
             type: getFileType(name),
-            content: name.endsWith(".sol")
-                ? `// SPDX-License-Identifier: MIT\npragma solidity ^0.8.0;\n\ncontract ${name.replace(".sol", "")} {\n    \n}\n`
-                : "",
+            content,
         };
         setProject((prev) => {
             const newRoot = JSON.parse(JSON.stringify(prev.root));
@@ -245,6 +422,11 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         });
         setActiveFileId(newFile.id);
     }, []);
+
+    const createSolidityFile = useCallback((template: SolidityTemplate, parentFolderId?: string) => {
+        const templateData = SOLIDITY_TEMPLATES[template];
+        createFile(templateData.defaultFileName, parentFolderId, template);
+    }, [createFile]);
 
     const renameFile = useCallback((id: string, newName: string) => {
         setProject((prev) => {
@@ -565,6 +747,65 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         addLog({ type: "system", msg: "Wallet disconnected." });
     }, [addLog]);
 
+    // --- Contract Interaction ---
+
+    const getContractFunctions = useCallback((): ABIFunction[] => {
+        if (!compileResult?.abi || !Array.isArray(compileResult.abi)) return [];
+        return (compileResult.abi as ABIFunction[]).filter(
+            (entry) => entry.type === "function"
+        );
+    }, [compileResult]);
+
+    const callContractFunction = useCallback(async (
+        functionName: string,
+        args: Record<string, string>,
+        isView: boolean
+    ): Promise<FunctionCallResult> => {
+        if (!deployResult?.contractId) {
+            return { success: false, error: "No contract deployed" };
+        }
+
+        const argsArray = Object.values(args);
+        addLog({
+            type: isView ? "info" : "system",
+            msg: `Calling ${functionName}(${argsArray.join(", ")})...`
+        });
+
+        try {
+            const response = await fetch("/api/call", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    contractId: deployResult.contractId,
+                    functionName,
+                    args: argsArray,
+                    isView,
+                }),
+            });
+
+            const result = await response.json();
+
+            if (result.success) {
+                if (isView) {
+                    addLog({ type: "success", msg: `↳ ${functionName} returned: ${JSON.stringify(result.result)}` });
+                } else {
+                    addLog({ type: "success", msg: `↳ Transaction successful` });
+                    if (result.txHash) {
+                        addLog({ type: "info", msg: `  TX: ${result.txHash.slice(0, 16)}...` });
+                    }
+                }
+                return result;
+            } else {
+                addLog({ type: "error", msg: `↳ ${functionName} failed: ${result.error}` });
+                return result;
+            }
+        } catch (err) {
+            const error = err instanceof Error ? err.message : "Network error";
+            addLog({ type: "error", msg: `↳ Call failed: ${error}` });
+            return { success: false, error };
+        }
+    }, [deployResult, addLog]);
+
     // --- Context ---
 
     const contextValue: ProjectContextType = {
@@ -574,6 +815,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         setActiveFileId,
         updateFileContent,
         createFile,
+        createSolidityFile,
         renameFile,
         deleteFile,
         createFolder,
@@ -593,6 +835,8 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         isWalletConnected,
         connectWallet,
         disconnectWallet,
+        callContractFunction,
+        getContractFunctions,
     };
 
     return (

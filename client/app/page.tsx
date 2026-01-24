@@ -492,7 +492,7 @@ function Philosophy() {
             {
               num: "01",
               title: "Compile, don't interpret",
-              desc: "Solidity → Soroban WASM via Solang. No EVM runtime overhead. Your contracts run as native WebAssembly.",
+              desc: "Solidity → Soroban WASM via TVA. No EVM runtime overhead. Your contracts run as native WebAssembly.",
             },
             {
               num: "02",
@@ -545,7 +545,7 @@ contract Counter {
     {
       num: "02",
       title: "Compile to WASM",
-      desc: "Solang compiles your Solidity directly to Soroban-compatible WebAssembly. No bytecode interpretation. Native speed.",
+      desc: "TVA compiles your Solidity directly to Soroban-compatible WebAssembly. No bytecode interpretation. Native speed.",
       code: `$ TVA Protocol compile Counter.sol
 
 Compiling Counter.sol...

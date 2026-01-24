@@ -101,7 +101,7 @@ export default function StatusBar() {
 
                 {/* Compiler */}
                 <div className="flex items-center gap-1 px-2 h-full">
-                    <span className="text-[#444]">Solang v0.3.4</span>
+                    <span className="text-[#444]">TVA v0.3.4</span>
                 </div>
             </div>
         </div>

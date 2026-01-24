@@ -2,90 +2,67 @@
 
 import React, { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Folder, File, useProject } from "./useProjectState";
+import { Folder, File, useProject, SOLIDITY_TEMPLATES, SolidityTemplate, ABIFunction, FunctionCallResult } from "./useProjectState";
 
 // ─── ICONS (Larger sizes) ─────────────────────────────────────────────────────
 
 const ChevronIcon = ({ open }: { open: boolean }) => (
     <motion.svg
-        width={14}
-        height={14}
+        width={12}
+        height={12}
         viewBox="0 0 24 24"
         fill="none"
         stroke="currentColor"
-        strokeWidth="2.5"
+        strokeWidth="2"
         initial={false}
         animate={{ rotate: open ? 90 : 0 }}
-        transition={{ duration: 0.2, ease: [0.4, 0, 0.2, 1] }}
-        className="shrink-0"
+        transition={{ duration: 0.15, ease: [0.4, 0, 0.2, 1] }}
+        className="shrink-0 text-[#606060]"
     >
         <path d="M9 18l6-6-6-6" />
     </motion.svg>
 );
 
 const FileTypeIcon = ({ name, isActive }: { name: string; isActive?: boolean }) => {
-    const ext = name.split(".").pop() || "";
-    const config: Record<string, { color: string; label: string; glow?: string }> = {
-        sol: { color: "#FFC800", label: "◆", glow: "rgba(255, 200, 0, 0.5)" },
-        rs: { color: "#DEA584", label: "RS", glow: "rgba(222, 165, 132, 0.4)" },
-        ts: { color: "#3178C6", label: "TS", glow: "rgba(49, 120, 198, 0.4)" },
-        js: { color: "#F7DF1E", label: "JS", glow: "rgba(247, 223, 30, 0.4)" },
-        json: { color: "#9B7FFF", label: "{}", glow: "rgba(155, 127, 255, 0.4)" },
-        md: { color: "#519ABA", label: "◇", glow: "rgba(81, 154, 186, 0.4)" },
-    };
-    const c = config[ext] || { color: "#4a4a4a", label: ext.slice(0, 2).toUpperCase() };
+    const ext = name.split(".").pop()?.toLowerCase() || "";
+    const isMoveFile = ext === "move" || ext === "toml";
+
     return (
-        <motion.div
-            className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0 relative"
-            style={{
-                background: `linear-gradient(135deg, ${c.color}10 0%, ${c.color}20 100%)`,
-                border: `1px solid ${c.color}30`,
-                boxShadow: isActive ? `0 0 16px ${c.glow || c.color + '40'}` : 'none'
-            }}
-            whileHover={{
-                scale: 1.08,
-                boxShadow: `0 0 12px ${c.glow || c.color + '30'}`
-            }}
-            transition={{ duration: 0.15 }}
+        <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            className="shrink-0"
         >
-            <span style={{
-                color: c.color,
-                fontSize: ext === 'sol' || ext === 'md' ? "14px" : "10px",
-                fontWeight: 700,
-                textShadow: isActive ? `0 0 8px ${c.color}` : 'none'
-            }}>{c.label}</span>
-        </motion.div>
+            <path
+                d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6z"
+                fill={isActive ? "#FFC800" : "#4a4a4a"}
+                fillOpacity={isActive ? 0.15 : 0.1}
+                stroke={isActive ? "#FFC800" : "#606060"}
+                strokeWidth="1.5"
+            />
+            <path
+                d="M14 2v6h6"
+                stroke={isActive ? "#FFC800" : "#606060"}
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+            />
+        </svg>
     );
 };
 
 const FolderGlyph = ({ open }: { open: boolean }) => (
-    <motion.div
-        className="relative shrink-0"
-        animate={{ scale: open ? 1.05 : 1 }}
-        transition={{ duration: 0.15 }}
-    >
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-            <defs>
-                <linearGradient id="folderGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                    <stop offset="0%" stopColor={open ? "#FFC800" : "#3a3a3a"} />
-                    <stop offset="100%" stopColor={open ? "#E5B400" : "#2a2a2a"} />
-                </linearGradient>
-            </defs>
-            <path
-                d="M3 7V17C3 18.1 3.9 19 5 19H19C20.1 19 21 18.1 21 17V9C21 7.9 20.1 7 19 7H13L11 5H5C3.9 5 3 5.9 3 7Z"
-                fill="url(#folderGrad)"
-                opacity={open ? 1 : 0.6}
-            />
-        </svg>
-        {open && (
-            <motion.div
-                className="absolute inset-0"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                style={{ boxShadow: '0 0 12px rgba(255, 200, 0, 0.4)' }}
-            />
-        )}
-    </motion.div>
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" className="shrink-0">
+        <path
+            d="M3 7V17C3 18.1 3.9 19 5 19H19C20.1 19 21 18.1 21 17V9C21 7.9 20.1 7 19 7H13L11 5H5C3.9 5 3 5.9 3 7Z"
+            fill={open ? "#606060" : "#4a4a4a"}
+            fillOpacity={open ? 0.3 : 0.2}
+            stroke={open ? "#808080" : "#606060"}
+            strokeWidth="1.5"
+        />
+    </svg>
 );
 
 const CopyIcon = ({ size = 16 }: { size?: number }) => (
@@ -167,14 +144,274 @@ function InlineInput({ initial, onSubmit, onCancel }: { initial: string; onSubmi
 
 // ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
 
+// ─── CONTRACT FUNCTION CARD ───────────────────────────────────────────────────
+
+interface FunctionCardProps {
+    fn: ABIFunction;
+    onCall: (functionName: string, args: Record<string, string>, isView: boolean) => Promise<FunctionCallResult>;
+}
+
+function FunctionCard({ fn, onCall }: FunctionCardProps) {
+    const [args, setArgs] = useState<Record<string, string>>({});
+    const [isLoading, setIsLoading] = useState(false);
+    const [result, setResult] = useState<FunctionCallResult | null>(null);
+    const [isExpanded, setIsExpanded] = useState(false);
+
+    const isView = fn.stateMutability === "view" || fn.stateMutability === "pure";
+    const hasInputs = fn.inputs && fn.inputs.length > 0;
+    const hasOutputs = fn.outputs && fn.outputs.length > 0;
+
+    const handleCall = async () => {
+        setIsLoading(true);
+        setResult(null);
+        try {
+            const res = await onCall(fn.name, args, isView);
+            setResult(res);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const getTypeColor = (type: string) => {
+        if (type.startsWith("uint") || type.startsWith("int")) return "#3B82F6";
+        if (type === "string") return "#22C55E";
+        if (type === "bool") return "#A855F7";
+        if (type === "address") return "#F59E0B";
+        if (type.includes("[]")) return "#EC4899";
+        return "#6B7280";
+    };
+
+    return (
+        <motion.div
+            className="rounded-lg border border-[#1a1a1a] bg-[#080808] overflow-hidden"
+            initial={{ opacity: 0, y: 4 }}
+            animate={{ opacity: 1, y: 0 }}
+        >
+            {/* Function Header */}
+            <div
+                className={`flex items-center gap-2 px-3 py-2 cursor-pointer transition-colors ${
+                    isView ? "hover:bg-[#3B82F6]/5" : "hover:bg-[#F59E0B]/5"
+                }`}
+                onClick={() => hasInputs && setIsExpanded(!isExpanded)}
+            >
+                {/* Function type badge */}
+                <div
+                    className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wide ${
+                        isView
+                            ? "bg-[#3B82F6]/15 text-[#3B82F6] border border-[#3B82F6]/20"
+                            : "bg-[#F59E0B]/15 text-[#F59E0B] border border-[#F59E0B]/20"
+                    }`}
+                >
+                    {isView ? "view" : "write"}
+                </div>
+
+                {/* Function name */}
+                <span className="text-[12px] font-mono font-medium text-[#e0e0e0] flex-1">
+                    {fn.name}
+                </span>
+
+                {/* Expand indicator if has inputs */}
+                {hasInputs && (
+                    <motion.div
+                        animate={{ rotate: isExpanded ? 90 : 0 }}
+                        transition={{ duration: 0.15 }}
+                        className="text-[#404040]"
+                    >
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M9 18l6-6-6-6" />
+                        </svg>
+                    </motion.div>
+                )}
+
+                {/* Quick call button for no-arg functions */}
+                {!hasInputs && (
+                    <motion.button
+                        onClick={(e) => { e.stopPropagation(); handleCall(); }}
+                        disabled={isLoading}
+                        className={`px-2 py-1 rounded text-[10px] font-semibold transition-colors ${
+                            isView
+                                ? "bg-[#3B82F6] hover:bg-[#2563EB] text-white"
+                                : "bg-[#F59E0B] hover:bg-[#D97706] text-black"
+                        } disabled:opacity-50`}
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
+                    >
+                        {isLoading ? (
+                            <motion.div
+                                className="w-3 h-3 border-2 border-current/30 border-t-current rounded-full"
+                                animate={{ rotate: 360 }}
+                                transition={{ repeat: Infinity, duration: 0.6, ease: "linear" }}
+                            />
+                        ) : (
+                            "Call"
+                        )}
+                    </motion.button>
+                )}
+            </div>
+
+            {/* Expanded inputs section */}
+            <AnimatePresence>
+                {(isExpanded || !hasInputs) && hasInputs && (
+                    <motion.div
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: "auto", opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        transition={{ duration: 0.15 }}
+                        className="overflow-hidden"
+                    >
+                        <div className="px-3 pb-3 space-y-2 border-t border-[#111]">
+                            <div className="pt-2 space-y-2">
+                                {fn.inputs.map((input, idx) => (
+                                    <div key={idx} className="space-y-1">
+                                        <div className="flex items-center gap-1.5">
+                                            <span className="text-[10px] text-[#606060]">{input.name || `arg${idx}`}</span>
+                                            <span
+                                                className="text-[9px] font-mono px-1 py-0.5 rounded"
+                                                style={{
+                                                    color: getTypeColor(input.type),
+                                                    backgroundColor: getTypeColor(input.type) + "15"
+                                                }}
+                                            >
+                                                {input.type}
+                                            </span>
+                                        </div>
+                                        <input
+                                            type="text"
+                                            placeholder={`Enter ${input.type}...`}
+                                            value={args[input.name || `arg${idx}`] || ""}
+                                            onChange={(e) => setArgs({ ...args, [input.name || `arg${idx}`]: e.target.value })}
+                                            className="w-full px-2 py-1.5 text-[11px] font-mono bg-[#0a0a0a] border border-[#222] rounded-md text-white placeholder:text-[#404040] focus:border-[#FFC800]/50 focus:outline-none transition-colors"
+                                        />
+                                    </div>
+                                ))}
+                            </div>
+
+                            <motion.button
+                                onClick={handleCall}
+                                disabled={isLoading}
+                                className={`w-full py-2 rounded-md text-[11px] font-semibold transition-colors flex items-center justify-center gap-2 ${
+                                    isView
+                                        ? "bg-[#3B82F6] hover:bg-[#2563EB] text-white"
+                                        : "bg-[#F59E0B] hover:bg-[#D97706] text-black"
+                                } disabled:opacity-50`}
+                                whileHover={{ scale: 1.01 }}
+                                whileTap={{ scale: 0.98 }}
+                            >
+                                {isLoading && (
+                                    <motion.div
+                                        className="w-3 h-3 border-2 border-current/30 border-t-current rounded-full"
+                                        animate={{ rotate: 360 }}
+                                        transition={{ repeat: Infinity, duration: 0.6, ease: "linear" }}
+                                    />
+                                )}
+                                {isView ? "Query" : "Transact"}
+                            </motion.button>
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            {/* Result display */}
+            <AnimatePresence>
+                {result && (
+                    <motion.div
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: "auto", opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        className="overflow-hidden"
+                    >
+                        <div className={`px-3 py-2 border-t text-[11px] font-mono ${
+                            result.success
+                                ? "border-[#22C55E]/20 bg-[#22C55E]/5 text-[#22C55E]"
+                                : "border-[#EF4444]/20 bg-[#EF4444]/5 text-[#EF4444]"
+                        }`}>
+                            {result.success ? (
+                                <div className="flex items-start gap-2">
+                                    <span className="text-[10px] opacity-60">↳</span>
+                                    <span className="break-all">{JSON.stringify(result.result)}</span>
+                                </div>
+                            ) : (
+                                <div className="flex items-start gap-2">
+                                    <span className="text-[10px]">✗</span>
+                                    <span>{result.error}</span>
+                                </div>
+                            )}
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+        </motion.div>
+    );
+}
+
+// ─── TEMPLATE SELECTOR ────────────────────────────────────────────────────────
+
+interface TemplateSelectorProps {
+    onSelect: (template: SolidityTemplate) => void;
+    onClose: () => void;
+}
+
+function TemplateSelector({ onSelect, onClose }: TemplateSelectorProps) {
+    const ref = useRef<HTMLDivElement>(null);
+    useEffect(() => {
+        const handler = (e: MouseEvent) => {
+            if (ref.current && !ref.current.contains(e.target as Node)) onClose();
+        };
+        document.addEventListener("mousedown", handler);
+        return () => document.removeEventListener("mousedown", handler);
+    }, [onClose]);
+
+    const templates = Object.entries(SOLIDITY_TEMPLATES) as [SolidityTemplate, typeof SOLIDITY_TEMPLATES[SolidityTemplate]][];
+
+    return (
+        <motion.div
+            ref={ref}
+            initial={{ opacity: 0, y: -8, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -8, scale: 0.95 }}
+            transition={{ duration: 0.15 }}
+            className="absolute right-0 top-full mt-2 w-[220px] z-[100] bg-[#0a0a0a] border border-[#222] rounded-xl shadow-2xl shadow-black/60 overflow-hidden"
+        >
+            <div className="px-3 py-2 border-b border-[#1a1a1a] bg-[#050505]">
+                <span className="text-[10px] text-[#606060] uppercase tracking-wider font-semibold">New Solidity Contract</span>
+            </div>
+            <div className="max-h-[280px] overflow-y-auto py-1">
+                {templates.map(([key, template]) => (
+                    <motion.button
+                        key={key}
+                        onClick={() => { onSelect(key); onClose(); }}
+                        className="w-full text-left px-3 py-2.5 hover:bg-[#FFC800]/5 transition-colors"
+                        whileHover={{ x: 2 }}
+                    >
+                        <div className="flex items-center gap-2.5">
+                            <div className="w-7 h-7 rounded-lg bg-[#FFC800]/10 border border-[#FFC800]/20 flex items-center justify-center shrink-0">
+                                <span className="text-[#FFC800] text-[11px] font-bold">◆</span>
+                            </div>
+                            <div className="flex-1 min-w-0">
+                                <div className="text-[12px] text-[#c0c0c0] font-medium">{template.name}</div>
+                                <div className="text-[10px] text-[#505050]">{template.description}</div>
+                            </div>
+                        </div>
+                    </motion.button>
+                ))}
+            </div>
+        </motion.div>
+    );
+}
+
+// ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
+
 export default function Sidebar() {
     const {
         project, activeFileId, setActiveFileId,
-        createFile, renameFile, deleteFile, createFolder, deleteFolder,
+        createFile, createSolidityFile, renameFile, deleteFile, createFolder, deleteFolder,
         buildStatus, compileResult, verifyResult, deployResult,
         compile, verify, deploy,
         walletAddress, walletBalance, isWalletConnected, connectWallet, disconnectWallet,
+        callContractFunction, getContractFunctions,
     } = useProject();
+
+    const contractFunctions = getContractFunctions();
 
     const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set(["root"]));
     const [contextMenu, setContextMenu] = useState<ContextMenuProps | null>(null);
@@ -182,6 +419,7 @@ export default function Sidebar() {
     const [creatingFolder, setCreatingFolder] = useState<string | null>(null);
     const [renamingId, setRenamingId] = useState<string | null>(null);
     const [copied, setCopied] = useState(false);
+    const [showTemplateSelector, setShowTemplateSelector] = useState(false);
 
     // Split View State
     const [bottomPanelHeight, setBottomPanelHeight] = useState("45%");
@@ -202,17 +440,17 @@ export default function Sidebar() {
 
     // ─── FILE TREE RENDERERS ────────────────────────────────────────────────
 
-    const RenderFile = ({ file, depth }: { file: File; depth: number }) => {
+    const RenderFile = ({ file, depth, isLast }: { file: File; depth: number; isLast: boolean }) => {
         const isActive = activeFileId === file.id;
         const isRenaming = renamingId === file.id;
 
         return (
             <motion.div
-                className={`group flex items-center gap-3 py-2 pr-4 cursor-pointer relative ${isActive
+                className={`group flex items-center py-1.5 pr-4 cursor-pointer relative ${isActive
                     ? "text-[#FFC800]"
                     : "text-[#707070] hover:text-[#b0b0b0]"
                     }`}
-                style={{ paddingLeft: `${depth * 20 + 24}px` }}
+                style={{ paddingLeft: `${depth * 24 + 16}px` }}
                 onClick={() => !isRenaming && setActiveFileId(file.id)}
                 onDoubleClick={() => setRenamingId(file.id)}
                 onContextMenu={(e) => {
@@ -234,49 +472,73 @@ export default function Sidebar() {
                 }}
                 transition={{ duration: 0.15 }}
             >
-                <AnimatePresence>
-                    {isActive && (
-                        <motion.div
-                            className="absolute left-0 top-2 bottom-2 w-[3px] rounded-r-full"
-                            style={{
-                                background: 'linear-gradient(180deg, #FFC800 0%, #E5B400 100%)',
-                                boxShadow: '0 0 12px rgba(255, 200, 0, 0.6)'
-                            }}
-                            initial={{ scaleY: 0, opacity: 0 }}
-                            animate={{ scaleY: 1, opacity: 1 }}
-                            exit={{ scaleY: 0, opacity: 0 }}
-                            transition={{ duration: 0.2 }}
-                        />
-                    )}
-                </AnimatePresence>
+                {/* Tree connector line */}
+                {depth > 0 && (
+                    <div className="absolute flex items-center" style={{ left: `${(depth - 1) * 24 + 28}px`, top: 0, bottom: isLast ? '50%' : 0 }}>
+                        <div className="w-[1px] h-full bg-[#2a2a2a]" />
+                    </div>
+                )}
+                {depth > 0 && (
+                    <div className="absolute" style={{ left: `${(depth - 1) * 24 + 28}px`, top: '50%', width: '12px', height: '1px', background: '#2a2a2a' }} />
+                )}
 
-                <FileTypeIcon name={file.name} isActive={isActive} />
-                {isRenaming ? (
-                    <InlineInput
-                        initial={file.name}
-                        onSubmit={(v) => { renameFile(file.id, v); setRenamingId(null); }}
-                        onCancel={() => setRenamingId(null)}
-                    />
-                ) : (
-                    <span
-                        className="truncate select-none text-[14px] font-medium"
-                        style={{ textShadow: isActive ? '0 0 16px rgba(255, 200, 0, 0.4)' : 'none' }}
+                <div className="flex items-center gap-2.5 ml-1 flex-1 min-w-0">
+                    <FileTypeIcon name={file.name} isActive={isActive} />
+                    {isRenaming ? (
+                        <InlineInput
+                            initial={file.name}
+                            onSubmit={(v) => { renameFile(file.id, v); setRenamingId(null); }}
+                            onCancel={() => setRenamingId(null)}
+                        />
+                    ) : (
+                        <span
+                            className="truncate select-none text-[13px] font-medium"
+                            style={{ textShadow: isActive ? '0 0 16px rgba(255, 200, 0, 0.4)' : 'none' }}
+                        >
+                            {file.name}
+                        </span>
+                    )}
+                </div>
+
+                {/* Delete button on hover */}
+                {!isRenaming && (
+                    <motion.button
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            deleteFile(file.id);
+                        }}
+                        className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-[#EF4444]/20 text-[#505050] hover:text-[#EF4444] transition-all"
+                        whileHover={{ scale: 1.1 }}
+                        whileTap={{ scale: 0.9 }}
+                        title="Delete file"
                     >
-                        {file.name}
-                    </span>
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" />
+                        </svg>
+                    </motion.button>
                 )}
             </motion.div>
         );
     };
 
-    const RenderFolder = ({ folder, depth = 0 }: { folder: Folder; depth?: number }) => {
+    const RenderFolder = ({ folder, depth = 0, isLast = false }: { folder: Folder; depth?: number; isLast?: boolean }) => {
         const isExpanded = expandedFolders.has(folder.id);
+        const totalChildren = folder.folders.length + folder.files.length;
+
         return (
             <div className="relative">
+                {/* Vertical continuation line for parent */}
+                {depth > 1 && !isLast && (
+                    <div
+                        className="absolute top-0 bottom-0 w-[1px] bg-[#2a2a2a]"
+                        style={{ left: `${(depth - 2) * 24 + 28}px` }}
+                    />
+                )}
+
                 {depth > 0 && (
                     <motion.div
-                        className="group flex items-center gap-3 py-2 pr-4 cursor-pointer text-[#606060] hover:text-[#a0a0a0] relative"
-                        style={{ paddingLeft: `${depth * 20 + 24}px` }}
+                        className="group flex items-center py-1.5 pr-4 cursor-pointer text-[#707070] hover:text-[#a0a0a0] relative"
+                        style={{ paddingLeft: `${depth * 24 + 16}px` }}
                         onClick={() => toggleFolder(folder.id)}
                         onContextMenu={(e) => {
                             e.preventDefault();
@@ -291,9 +553,38 @@ export default function Sidebar() {
                         }}
                         whileHover={{ backgroundColor: "rgba(255, 255, 255, 0.02)" }}
                     >
-                        <ChevronIcon open={isExpanded} />
-                        <FolderGlyph open={isExpanded} />
-                        <span className="truncate select-none text-[14px] font-semibold">{folder.name}</span>
+                        {/* Tree connector line - vertical */}
+                        {depth > 0 && (
+                            <div className="absolute" style={{ left: `${(depth - 1) * 24 + 28}px`, top: 0, bottom: isLast ? '50%' : 0 }}>
+                                <div className="w-[1px] h-full bg-[#2a2a2a]" />
+                            </div>
+                        )}
+                        {/* Tree connector line - horizontal */}
+                        {depth > 0 && (
+                            <div className="absolute" style={{ left: `${(depth - 1) * 24 + 28}px`, top: '50%', width: '12px', height: '1px', background: '#2a2a2a' }} />
+                        )}
+
+                        <div className="flex items-center gap-2 ml-1 flex-1 min-w-0">
+                            <ChevronIcon open={isExpanded} />
+                            <FolderGlyph open={isExpanded} />
+                            <span className="truncate select-none text-[13px] font-semibold">{folder.name}</span>
+                        </div>
+
+                        {/* Delete button on hover */}
+                        <motion.button
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                deleteFolder(folder.id);
+                            }}
+                            className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-[#EF4444]/20 text-[#505050] hover:text-[#EF4444] transition-all"
+                            whileHover={{ scale: 1.1 }}
+                            whileTap={{ scale: 0.9 }}
+                            title="Delete folder"
+                        >
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" />
+                            </svg>
+                        </motion.button>
                     </motion.div>
                 )}
                 <AnimatePresence>
@@ -303,16 +594,27 @@ export default function Sidebar() {
                             animate={{ height: "auto", opacity: 1 }}
                             exit={{ height: 0, opacity: 0 }}
                             transition={{ duration: 0.2, ease: [0.4, 0, 0.2, 1] }}
-                            className="overflow-hidden"
+                            className="overflow-hidden relative"
                         >
-                            {folder.folders.map((sub) => (
-                                <RenderFolder key={sub.id} folder={sub} depth={(depth || 0) + 1} />
-                            ))}
-                            {folder.files.map((file) => (
-                                <RenderFile key={file.id} file={file} depth={(depth || 0) + 1} />
+                            {/* Vertical line for children */}
+                            {depth > 0 && totalChildren > 0 && (
+                                <div
+                                    className="absolute w-[1px] bg-[#2a2a2a]"
+                                    style={{ left: `${(depth) * 24 + 4}px`, top: 0, bottom: '12px' }}
+                                />
+                            )}
+
+                            {folder.folders.map((sub, idx) => {
+                                const isLastChild = idx === folder.folders.length - 1 && folder.files.length === 0;
+                                return (
+                                    <RenderFolder key={sub.id} folder={sub} depth={(depth || 0) + 1} isLast={isLastChild} />
+                                );
+                            })}
+                            {folder.files.map((file, idx) => (
+                                <RenderFile key={file.id} file={file} depth={(depth || 0) + 1} isLast={idx === folder.files.length - 1} />
                             ))}
                             {creatingFile === folder.id && (
-                                <div style={{ paddingLeft: `${((depth || 0) + 1) * 20 + 24}px` }} className="py-2 pr-4">
+                                <div style={{ paddingLeft: `${((depth || 0) + 1) * 24 + 16}px` }} className="py-1.5 pr-4">
                                     <InlineInput
                                         initial="NewContract.sol"
                                         onSubmit={(v) => { createFile(v, folder.id); setCreatingFile(null); }}
@@ -321,7 +623,7 @@ export default function Sidebar() {
                                 </div>
                             )}
                             {creatingFolder === folder.id && (
-                                <div style={{ paddingLeft: `${((depth || 0) + 1) * 20 + 24}px` }} className="py-2 pr-4">
+                                <div style={{ paddingLeft: `${((depth || 0) + 1) * 24 + 16}px` }} className="py-1.5 pr-4">
                                     <InlineInput
                                         initial="new-folder"
                                         onSubmit={(v) => { createFolder(v, folder.id); setCreatingFolder(null); }}
@@ -418,6 +720,26 @@ export default function Sidebar() {
                         Files
                     </span>
                     <div className="flex items-center gap-1">
+                        {/* New Solidity Contract */}
+                        <div className="relative">
+                            <motion.button
+                                onClick={() => setShowTemplateSelector(!showTemplateSelector)}
+                                className="w-7 h-7 flex items-center justify-center rounded-lg text-[#FFC800] bg-[#FFC800]/10 hover:bg-[#FFC800]/20 transition-colors"
+                                whileHover={{ scale: 1.05 }}
+                                whileTap={{ scale: 0.95 }}
+                                title="New Solidity Contract"
+                            >
+                                <span className="text-[12px] font-bold">◆</span>
+                            </motion.button>
+                            <AnimatePresence>
+                                {showTemplateSelector && (
+                                    <TemplateSelector
+                                        onSelect={(template) => createSolidityFile(template, "root")}
+                                        onClose={() => setShowTemplateSelector(false)}
+                                    />
+                                )}
+                            </AnimatePresence>
+                        </div>
                         <motion.button
                             onClick={() => setCreatingFile("root")}
                             className="w-7 h-7 flex items-center justify-center rounded-lg text-[#505050] hover:text-[#FFC800] hover:bg-[#FFC800]/10 transition-colors"
@@ -587,10 +909,10 @@ export default function Sidebar() {
                             className="p-3 rounded-lg bg-[#22C55E]/5 border border-[#22C55E]/20 space-y-2"
                         >
                             <div className="flex items-center gap-2 text-[#22C55E] text-[11px] font-bold uppercase tracking-wider">
-                                <div className="w-1.5 h-1.5 rounded-full bg-[#22C55E]" />
-                                Deployment Successful
+                                <div className="w-1.5 h-1.5 rounded-full bg-[#22C55E] animate-pulse" />
+                                Deployed
                             </div>
-                            <div className="text-[12px] text-[#22C55E] font-mono break-all">
+                            <div className="text-[11px] text-[#22C55E] font-mono break-all opacity-80">
                                 {deployResult.contractId}
                             </div>
                             {deployResult.explorerUrl && (
@@ -598,12 +920,48 @@ export default function Sidebar() {
                                     href={deployResult.explorerUrl}
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    className="flex items-center gap-1 text-[11px] text-[#22C55E]/70 hover:text-[#22C55E] hover:underline"
+                                    className="flex items-center gap-1 text-[10px] text-[#22C55E]/70 hover:text-[#22C55E] hover:underline"
                                 >
                                     <ExternalLinkIcon size={10} />
                                     View in Explorer
                                 </a>
                             )}
+                        </motion.div>
+                    )}
+
+                    {/* Contract Interaction */}
+                    {deployResult?.success && contractFunctions.length > 0 && (
+                        <motion.div
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: 0.1 }}
+                            className="space-y-3"
+                        >
+                            <div className="flex items-center justify-between">
+                                <div className="text-[11px] text-[#505050] font-medium uppercase tracking-wider">
+                                    Interact
+                                </div>
+                                <div className="flex items-center gap-2 text-[9px]">
+                                    <span className="flex items-center gap-1 text-[#3B82F6]">
+                                        <div className="w-1.5 h-1.5 rounded-full bg-[#3B82F6]" />
+                                        Read
+                                    </span>
+                                    <span className="flex items-center gap-1 text-[#F59E0B]">
+                                        <div className="w-1.5 h-1.5 rounded-full bg-[#F59E0B]" />
+                                        Write
+                                    </span>
+                                </div>
+                            </div>
+
+                            <div className="space-y-2">
+                                {contractFunctions.map((fn, idx) => (
+                                    <FunctionCard
+                                        key={`${fn.name}-${idx}`}
+                                        fn={fn}
+                                        onCall={callContractFunction}
+                                    />
+                                ))}
+                            </div>
                         </motion.div>
                     )}
 
