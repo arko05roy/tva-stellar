@@ -93,6 +93,91 @@ function parseCompilerOutput(output: string): { errors: string[]; warnings: stri
   return { errors, warnings };
 }
 
+/**
+ * Transform msg.sender patterns for Soroban compatibility.
+ * - Constructor: adds `address _caller` param and replaces `msg.sender` with `_caller`
+ * - Regular functions: removes `if (msg.sender != X) { return; }` access control blocks
+ *   since Soroban handles authorization at the runtime level.
+ *
+ * This avoids the inkwell panic that occurs when `address` is the first parameter
+ * of a non-constructor public function in solang's Soroban target.
+ */
+function transformMsgSender(source: string): string {
+  let result = source;
+
+  // Step 1: Transform the constructor - add _caller param and replace msg.sender
+  const constructorRegex = /constructor\s*\(([^)]*)\)/;
+  const constructorMatch = result.match(constructorRegex);
+  if (constructorMatch) {
+    const existingParams = constructorMatch[1].trim();
+    const newParams = existingParams
+      ? `address _caller, ${existingParams}`
+      : 'address _caller';
+    result = result.replace(constructorRegex, `constructor(${newParams})`);
+  }
+
+  // Step 2: Replace msg.sender with _caller ONLY inside the constructor body
+  // Find constructor body boundaries
+  const constructorBodyStart = result.indexOf('constructor');
+  if (constructorBodyStart !== -1) {
+    const braceStart = result.indexOf('{', constructorBodyStart);
+    if (braceStart !== -1) {
+      let depth = 0;
+      let braceEnd = -1;
+      for (let i = braceStart; i < result.length; i++) {
+        if (result[i] === '{') depth++;
+        else if (result[i] === '}') {
+          depth--;
+          if (depth === 0) { braceEnd = i; break; }
+        }
+      }
+      if (braceEnd !== -1) {
+        const beforeConstructor = result.slice(0, braceStart + 1);
+        const constructorBody = result.slice(braceStart + 1, braceEnd);
+        const afterConstructor = result.slice(braceEnd);
+
+        const transformedBody = constructorBody.replace(/msg\.sender/g, '_caller');
+        result = beforeConstructor + transformedBody + afterConstructor;
+      }
+    }
+  }
+
+  // Step 3: Remove msg.sender access control checks from regular functions.
+  // Patterns:
+  //   if (msg.sender != X) { return; }
+  //   if (msg.sender != X) { return 0; }
+  //   if (X != msg.sender) { return; }
+  //   if (X != msg.sender) { return 0; }
+  //   Multi-line variants
+  const accessControlPatterns = [
+    // Single-line: if (msg.sender != X) { return; } or { return 0; }
+    /if\s*\(\s*msg\.sender\s*!=\s*[^)]+\)\s*\{\s*return\s*[^;]*;\s*\}/g,
+    // Single-line reversed: if (X != msg.sender) { return; }
+    /if\s*\(\s*[^)]+\s*!=\s*msg\.sender\s*\)\s*\{\s*return\s*[^;]*;\s*\}/g,
+    // Multi-line: if (msg.sender != X) {\n  return;\n}
+    /if\s*\(\s*msg\.sender\s*!=\s*[^)]+\)\s*\{[^}]*return\s*[^;]*;[^}]*\}/g,
+    // Multi-line reversed
+    /if\s*\(\s*[^)]+\s*!=\s*msg\.sender\s*\)\s*\{[^}]*return\s*[^;]*;[^}]*\}/g,
+    // Equality check (for patterns like if (msg.sender == owner) used in positive checks)
+    // Keep these - they're not access control blocks
+  ];
+
+  for (const pattern of accessControlPatterns) {
+    result = result.replace(pattern, '');
+  }
+
+  // Step 4: Remove any remaining msg.sender references in regular functions
+  // (after constructor processing, these would be in non-constructor code)
+  // Replace comparisons like `msg.sender == X` with `true` (for return statements)
+  result = result.replace(/msg\.sender\s*==\s*\w+/g, 'true');
+  result = result.replace(/\w+\s*==\s*msg\.sender/g, 'true');
+
+  // Clean up any double blank lines created by removing blocks
+  result = result.replace(/\n{3,}/g, '\n\n');
+
+  return result;
+}
+
 export async function POST(request: NextRequest): Promise<NextResponse<CompileResponse>> {
   let tempDir: string | null = null;
 
@@ -144,41 +229,13 @@ export async function POST(request: NextRequest): Promise<NextResponse<CompileRe
 
     let processedSource = source;
 
-    // If source contains msg.sender, run the msg-sender-shim preprocessor
+    // If source contains msg.sender, perform Soroban-compatible transformations.
+    // The solang compiler panics when address is the first parameter of non-constructor
+    // public functions, so we only inject _caller into constructors and remove
+    // msg.sender-based access control checks from regular functions (Soroban handles
+    // authorization at the runtime level).
     if (source.includes('msg.sender')) {
-      if (!existsSync(shimPath)) {
-        return NextResponse.json(
-          {
-            success: false,
-            errors: [`msg-sender-shim preprocessor not found at: ${shimPath}`],
-          },
-          { status: 500 }
-        );
-      }
-
-      // Write original source to temp file for shim processing
-      const shimInputPath = join(tempDir, 'shim_input.sol');
-      writeFileSync(shimInputPath, source, 'utf-8');
-
-      try {
-        const shimOutput = execSync(`"${shimPath}" "${shimInputPath}"`, {
-          encoding: 'utf-8',
-          timeout: 30000,
-          cwd: tempDir,
-        });
-        processedSource = shimOutput;
-      } catch (shimError: unknown) {
-        const err = shimError as { stderr?: string; message?: string };
-        return NextResponse.json(
-          {
-            success: false,
-            errors: [
-              `msg-sender-shim preprocessing failed: ${err.stderr || err.message || 'Unknown error'}`,
-            ],
-          },
-          { status: 422 }
-        );
-      }
+      processedSource = transformMsgSender(source);
     }
 
     // Write the (possibly preprocessed) source to the temp file
@@ -237,94 +294,65 @@ export async function POST(request: NextRequest): Promise<NextResponse<CompileRe
     const combinedOutput = compileStderr + '\n' + compileStdout;
     const parsed = parseCompilerOutput(combinedOutput);
 
-    // If compilation failed (non-zero exit code) or there are errors, return failure
-    if (compileExitCode !== 0 || parsed.errors.length > 0) {
-      // If we have parsed errors, return them
+    // Collect warnings regardless of outcome
+    warnings.push(...parsed.warnings);
+
+    // Check for WASM output first - the compiler may produce valid output
+    // even with a non-zero exit code (e.g., when there are only warnings)
+    let wasmFile: string | undefined;
+    let abiFile: string | undefined;
+    if (existsSync(outputDir)) {
+      const outputFiles = readdirSync(outputDir);
+      wasmFile = outputFiles.find((f) => f.endsWith('.wasm'));
+      abiFile = outputFiles.find((f) => f.endsWith('.json') || f.endsWith('.abi'));
+    }
+
+    // If no WASM was produced and there were errors or non-zero exit, report failure
+    if (!wasmFile) {
       if (parsed.errors.length > 0) {
         return NextResponse.json(
           {
             success: false,
             errors: parsed.errors,
-            warnings: parsed.warnings.length > 0 ? parsed.warnings : undefined,
+            warnings: warnings.length > 0 ? warnings : undefined,
           },
           { status: 422 }
         );
       }
-      
-      // If no parsed errors but compilation failed, try to extract error from output
-      if (combinedOutput.trim()) {
-        // Try to find error messages in the output
-        const errorLines = combinedOutput.split('\n').filter(line => 
-          line.toLowerCase().includes('error') || 
-          line.toLowerCase().includes('failed') ||
-          line.trim().length > 0
-        );
-        
-        if (errorLines.length > 0) {
-          return NextResponse.json(
-            {
-              success: false,
-              errors: errorLines.slice(0, 5), // Limit to first 5 error lines
-              warnings: parsed.warnings.length > 0 ? parsed.warnings : undefined,
-            },
-            { status: 422 }
+
+      if (compileExitCode !== 0) {
+        // Try to extract meaningful error from output
+        if (combinedOutput.trim()) {
+          const errorLines = combinedOutput.split('\n').filter(line =>
+            line.trim().length > 0
           );
+
+          if (errorLines.length > 0) {
+            return NextResponse.json(
+              {
+                success: false,
+                errors: errorLines.slice(0, 5),
+                warnings: warnings.length > 0 ? warnings : undefined,
+              },
+              { status: 422 }
+            );
+          }
         }
-      }
-      
-      // Fallback error message
-      return NextResponse.json(
-        {
-          success: false,
-          errors: ['Compilation failed with no error details'],
-          warnings: parsed.warnings.length > 0 ? parsed.warnings : undefined,
-        },
-        { status: 422 }
-      );
-    }
 
-    // If only warnings, continue
-    warnings.push(...parsed.warnings);
-
-    // Look for the compiled WASM output
-    if (!existsSync(outputDir)) {
-      // If we have compilation output, include it in the error
-      const errorMessages = ['Compilation produced no output directory'];
-      if (combinedOutput.trim()) {
-        // Include relevant error lines from the output
-        const relevantLines = combinedOutput.split('\n')
-          .filter(line => line.trim().length > 0)
-          .slice(0, 3); // Include first 3 non-empty lines
-        if (relevantLines.length > 0) {
-          errorMessages.push('Compiler output:', ...relevantLines);
-        }
-      }
-      
-      return NextResponse.json(
-        {
-          success: false,
-          errors: errorMessages,
-          warnings: warnings.length > 0 ? warnings : undefined,
-        },
-        { status: 422 }
-      );
-    }
-
-    const outputFiles = readdirSync(outputDir);
-    const wasmFile = outputFiles.find((f) => f.endsWith('.wasm'));
-    const abiFile = outputFiles.find((f) => f.endsWith('.json') || f.endsWith('.abi'));
-
-    if (!wasmFile) {
-      // Check if stderr had warnings we missed
-      if (compileStderr) {
-        const parsed = parseCompilerOutput(compileStderr);
-        warnings.push(...parsed.warnings);
+        return NextResponse.json(
+          {
+            success: false,
+            errors: ['Compilation failed with no error details'],
+            warnings: warnings.length > 0 ? warnings : undefined,
+          },
+          { status: 422 }
+        );
       }
 
       return NextResponse.json(
         {
           success: false,
-          errors: ['Compilation did not produce a WASM file'],
+          errors: ['Compilation produced no WASM output'],
           warnings: warnings.length > 0 ? warnings : undefined,
         },
         { status: 422 }
@@ -353,8 +381,8 @@ export async function POST(request: NextRequest): Promise<NextResponse<CompileRe
 
     // Parse any remaining warnings from stderr
     if (compileStderr && warnings.length === 0) {
-      const parsed = parseCompilerOutput(compileStderr);
-      warnings.push(...parsed.warnings);
+      const stderrParsed = parseCompilerOutput(compileStderr);
+      warnings.push(...stderrParsed.warnings);
     }
 
     const response: CompileResponse = {

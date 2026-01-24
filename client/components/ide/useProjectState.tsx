@@ -123,14 +123,16 @@ contract MyContract {
 pragma solidity ^0.8.0;
 
 contract Counter {
-    uint64 private count;
+    uint64 private persistent count;
 
     function increment() public {
         count += 1;
     }
 
     function decrement() public {
-        require(count > 0, "Counter: cannot decrement below zero");
+        if (count == 0) {
+            return;
+        }
         count -= 1;
     }
 
@@ -148,7 +150,7 @@ contract Counter {
 pragma solidity ^0.8.0;
 
 contract Greeter {
-    string private greeting;
+    string private persistent greeting;
 
     constructor(string memory _greeting) {
         greeting = _greeting;
@@ -175,11 +177,11 @@ pragma solidity ^0.8.0;
 // Note: Events with indexed address and reading uninitialized
 // mapping entries are not supported on Soroban.
 contract Token {
-    string public name;
-    string public symbol;
-    uint128 public totalSupply;
-    address public owner;
-    uint128 public ownerBalance;
+    string public instance name;
+    string public instance symbol;
+    uint128 public persistent totalSupply;
+    address public instance owner;
+    uint128 public persistent ownerBalance;
 
     constructor(string memory _name, string memory _symbol, uint128 _initialSupply) {
         name = _name;
@@ -276,13 +278,13 @@ pragma solidity ^0.8.0;
 // Soroban-compatible ERC1155 Multi-Token
 // Simplified implementation for Soroban compatibility.
 contract MultiToken {
-    string public name;
-    address public owner;
+    string public instance name;
+    address public instance owner;
 
     // Simplified balance tracking for token IDs 1, 2, 3
-    uint128 public balance1;
-    uint128 public balance2;
-    uint128 public balance3;
+    uint128 public persistent balance1;
+    uint128 public persistent balance2;
+    uint128 public persistent balance3;
 
     constructor(string memory _name) {
         name = _name;
@@ -343,7 +345,7 @@ contract MultiToken {
 pragma solidity ^0.8.0;
 
 contract Storage {
-    uint128 private value;
+    uint128 private persistent value;
 
     event ValueChanged(uint128 newValue);
 
@@ -421,7 +423,7 @@ pragma solidity ^0.8.0;
 contract MyToken {
     string public instance name;
     string public instance symbol;
-    uint8 public instance decimals;
+    uint32 public instance decimals;
     uint128 public persistent totalSupply;
     address public instance owner;
     uint128 public persistent ownerBalance;
@@ -479,7 +481,7 @@ pragma solidity ^0.8.0;
 contract BurnableToken {
     string public instance name;
     string public instance symbol;
-    uint8 public instance decimals;
+    uint32 public instance decimals;
     uint128 public persistent totalSupply;
     address public instance owner;
     uint128 public persistent ownerBalance;
@@ -536,7 +538,7 @@ pragma solidity ^0.8.0;
 contract PausableToken {
     string public instance name;
     string public instance symbol;
-    uint8 public instance decimals;
+    uint32 public instance decimals;
     uint128 public persistent totalSupply;
     address public instance owner;
     uint128 public persistent ownerBalance;
@@ -628,6 +630,10 @@ contract MyNFT {
             return;
         }
         baseURI = _baseURI;
+    }
+
+    function getBaseURI() public view returns (string memory) {
+        return baseURI;
     }
 
     function mint() public returns (uint128) {
@@ -1066,15 +1072,30 @@ contract AccessControlled {
     }
 
     function hasMinterRole(address account) public view returns (bool) {
-        return minterSet && minter == account;
+        if (!minterSet) {
+            return false;
+        }
+        if (minter == account) {
+            return true;
+        }
+        return false;
     }
 
     function hasPauserRole(address account) public view returns (bool) {
-        return pauserSet && pauser == account;
+        if (!pauserSet) {
+            return false;
+        }
+        if (pauser == account) {
+            return true;
+        }
+        return false;
     }
 
     function hasAdminRole(address account) public view returns (bool) {
-        return admin == account;
+        if (admin == account) {
+            return true;
+        }
+        return false;
     }
 }
 `
@@ -1205,7 +1226,7 @@ pragma solidity ^0.8.0;
 contract CappedToken {
     string public instance name;
     string public instance symbol;
-    uint8 public instance decimals;
+    uint32 public instance decimals;
     uint128 public persistent totalSupply;
     uint128 public instance cap;
     address public instance owner;
@@ -1749,25 +1770,25 @@ pragma solidity ^0.8.0;
 /// @notice Token with historical balance snapshots
 /// @dev Stores up to 5 snapshots of balances
 contract SnapshotToken {
-    string public name;
-    string public symbol;
-    uint8 public decimals;
-    uint128 public totalSupply;
-    address public owner;
-    uint128 public ownerBalance;
+    string public instance name;
+    string public instance symbol;
+    uint32 public instance decimals;
+    uint128 public persistent totalSupply;
+    address public instance owner;
+    uint128 public persistent ownerBalance;
 
     // Snapshot storage (up to 5 snapshots)
-    uint128 public snapshotCount;
-    uint128 public snapshot1Balance;
-    uint128 public snapshot2Balance;
-    uint128 public snapshot3Balance;
-    uint128 public snapshot4Balance;
-    uint128 public snapshot5Balance;
-    uint128 public snapshot1Id;
-    uint128 public snapshot2Id;
-    uint128 public snapshot3Id;
-    uint128 public snapshot4Id;
-    uint128 public snapshot5Id;
+    uint128 public persistent snapshotCount;
+    uint128 public persistent snapshot1Balance;
+    uint128 public persistent snapshot2Balance;
+    uint128 public persistent snapshot3Balance;
+    uint128 public persistent snapshot4Balance;
+    uint128 public persistent snapshot5Balance;
+    uint128 public persistent snapshot1Id;
+    uint128 public persistent snapshot2Id;
+    uint128 public persistent snapshot3Id;
+    uint128 public persistent snapshot4Id;
+    uint128 public persistent snapshot5Id;
 
     constructor(string memory _name, string memory _symbol, uint128 _initialSupply) {
         name = _name;
@@ -1834,17 +1855,17 @@ pragma solidity ^0.8.0;
 /// @notice Token with delegatable voting power
 /// @dev Simplified delegation model
 contract VotesToken {
-    string public name;
-    string public symbol;
-    uint8 public decimals;
-    uint128 public totalSupply;
-    address public owner;
-    uint128 public ownerBalance;
+    string public instance name;
+    string public instance symbol;
+    uint32 public instance decimals;
+    uint128 public persistent totalSupply;
+    address public instance owner;
+    uint128 public persistent ownerBalance;
 
     // Voting power tracking
-    address public ownerDelegate;
-    uint128 public ownerVotingPower;
-    bool public hasDelegated;
+    address public instance ownerDelegate;
+    uint128 public persistent ownerVotingPower;
+    bool public instance hasDelegated;
 
     constructor(string memory _name, string memory _symbol, uint128 _initialSupply) {
         name = _name;
@@ -1905,19 +1926,19 @@ pragma solidity ^0.8.0;
 /// @notice Token supporting flash loans
 /// @dev Simplified flash loan mechanism
 contract FlashToken {
-    string public name;
-    string public symbol;
-    uint8 public decimals;
-    uint128 public totalSupply;
-    address public owner;
-    uint128 public ownerBalance;
+    string public instance name;
+    string public instance symbol;
+    uint32 public instance decimals;
+    uint128 public persistent totalSupply;
+    address public instance owner;
+    uint128 public persistent ownerBalance;
 
     // Flash loan state
-    uint128 public flashFee;
-    uint128 public maxFlashLoan;
-    bool public flashLoanActive;
-    uint128 public totalFlashLoaned;
-    uint128 public totalFeesCollected;
+    uint128 public instance flashFee;
+    uint128 public persistent maxFlashLoan;
+    bool public instance flashLoanActive;
+    uint128 public persistent totalFlashLoaned;
+    uint128 public persistent totalFeesCollected;
 
     constructor(string memory _name, string memory _symbol, uint128 _initialSupply, uint128 _fee) {
         name = _name;
@@ -1983,17 +2004,17 @@ pragma solidity ^0.8.0;
 /// @notice Wraps underlying token 1:1
 /// @dev Simplified wrapper without actual transfer
 contract WrappedToken {
-    string public name;
-    string public symbol;
-    uint8 public decimals;
-    uint128 public totalSupply;
-    address public owner;
-    uint128 public ownerBalance;
+    string public instance name;
+    string public instance symbol;
+    uint32 public instance decimals;
+    uint128 public persistent totalSupply;
+    address public instance owner;
+    uint128 public persistent ownerBalance;
 
     // Wrapper state
-    string public underlyingName;
-    uint128 public totalDeposited;
-    uint128 public totalWithdrawn;
+    string public instance underlyingName;
+    uint128 public persistent totalDeposited;
+    uint128 public persistent totalWithdrawn;
 
     constructor(string memory _name, string memory _symbol, string memory _underlyingName) {
         name = _name;
@@ -2075,9 +2096,12 @@ contract RoyaltyNFT {
         return tokenId;
     }
 
-    function royaltyInfo(uint128 salePrice) public view returns (address, uint128) {
-        uint128 royaltyAmount = (salePrice * royaltyBps) / 10000;
-        return (royaltyReceiver, royaltyAmount);
+    function getRoyaltyAmount(uint128 salePrice) public view returns (uint128) {
+        return (salePrice * royaltyBps) / 10000;
+    }
+
+    function getRoyaltyReceiver() public view returns (address) {
+        return royaltyReceiver;
     }
 
     function setRoyaltyInfo(address receiver, uint128 bps) public {
@@ -2266,7 +2290,7 @@ pragma solidity ^0.8.0;
 contract TokenVault {
     string public instance name;
     string public instance symbol;
-    uint8 public instance decimals;
+    uint32 public instance decimals;
     address public instance owner;
 
     // Vault state
@@ -2760,8 +2784,24 @@ contract Multicall {
         flag = false;
     }
 
-    function getAll() public view returns (uint128, uint128, uint128, string memory, bool) {
-        return (value1, value2, value3, message, flag);
+    function getValue1() public view returns (uint128) {
+        return value1;
+    }
+
+    function getValue2() public view returns (uint128) {
+        return value2;
+    }
+
+    function getValue3() public view returns (uint128) {
+        return value3;
+    }
+
+    function getMessage() public view returns (string memory) {
+        return message;
+    }
+
+    function getFlag() public view returns (bool) {
+        return flag;
     }
 }
 `
@@ -2845,8 +2885,16 @@ contract MinimalForwarder {
         return getNonce(from) == providedNonce;
     }
 
-    function getStats() public view returns (uint128, uint128, uint128) {
-        return (totalForwarded, totalSuccessful, totalFailed);
+    function getTotalForwarded() public view returns (uint128) {
+        return totalForwarded;
+    }
+
+    function getTotalSuccessful() public view returns (uint128) {
+        return totalSuccessful;
+    }
+
+    function getTotalFailed() public view returns (uint128) {
+        return totalFailed;
     }
 }
 `
