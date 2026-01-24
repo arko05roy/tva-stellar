@@ -313,19 +313,6 @@ Emulation (Neon/Aurora):          TVA Protocol:
 
 ---
 
-## Current Limitations
-
-| Limitation | Status | Priority |
-|------------|--------|----------|
-| Event emission | In progress | Critical |
-| bytes20/bytes32 mapping keys | Planned | High |
-| msg.sender shimming | Planned | High |
-| TTL scope (all types) | Planned | Medium |
-| Inline assembly | Not supported | N/A |
-| delegatecall | Not supported | N/A |
-
----
-
 ## Development
 
 ```bash
