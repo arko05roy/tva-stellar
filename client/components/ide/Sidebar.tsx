@@ -158,10 +158,43 @@ function FunctionCard({ fn, onCall }: FunctionCardProps) {
     const [isExpanded, setIsExpanded] = useState(false);
 
     const isView = fn.stateMutability === "view" || fn.stateMutability === "pure";
-    const hasInputs = fn.inputs && fn.inputs.length > 0;
+    const visibleInputs = fn.inputs?.filter(i => i.name !== "_caller" && i.name !== "caller") || [];
+    const hasInputs = visibleInputs.length > 0;
     const hasOutputs = fn.outputs && fn.outputs.length > 0;
 
+    const validateArg = (value: string, type: string): string | null => {
+        if (!value && type !== "bool") return `Required`;
+        if (type.startsWith("uint") || type.startsWith("int")) {
+            if (!/^-?\d+$/.test(value)) return `Must be an integer`;
+        }
+        if (type === "bool") {
+            if (value && !["true", "false", "0", "1"].includes(value.toLowerCase())) return `Must be true/false`;
+        }
+        if (type === "address") {
+            if (!value.startsWith("0x") && !value.startsWith("G")) return `Must be an address`;
+        }
+        return null;
+    };
+
+    const getValidationErrors = (): Record<string, string> => {
+        const errors: Record<string, string> = {};
+        if (!fn.inputs) return errors;
+        for (const input of fn.inputs) {
+            if (input.name === "_caller" || input.name === "caller") continue;
+            const key = input.name || `arg${fn.inputs.indexOf(input)}`;
+            const value = args[key] || "";
+            const err = validateArg(value, input.type);
+            if (err) errors[key] = err;
+        }
+        return errors;
+    };
+
     const handleCall = async () => {
+        const errors = getValidationErrors();
+        if (Object.keys(errors).length > 0) {
+            setResult({ success: false, error: Object.entries(errors).map(([k, v]) => `${k}: ${v}`).join(", ") });
+            return;
+        }
         setIsLoading(true);
         setResult(null);
         try {
@@ -261,29 +294,37 @@ function FunctionCard({ fn, onCall }: FunctionCardProps) {
                     >
                         <div className="px-3 pb-3 space-y-2 border-t border-[#111]">
                             <div className="pt-2 space-y-2">
-                                {fn.inputs.map((input, idx) => (
-                                    <div key={idx} className="space-y-1">
-                                        <div className="flex items-center gap-1.5">
-                                            <span className="text-[10px] text-[#606060]">{input.name || `arg${idx}`}</span>
-                                            <span
-                                                className="text-[9px] font-mono px-1 py-0.5 rounded"
-                                                style={{
-                                                    color: getTypeColor(input.type),
-                                                    backgroundColor: getTypeColor(input.type) + "15"
-                                                }}
-                                            >
-                                                {input.type}
-                                            </span>
+                                {fn.inputs.filter(input => input.name !== "_caller" && input.name !== "caller").map((input, idx) => {
+                                    const key = input.name || `arg${idx}`;
+                                    const value = args[key] || "";
+                                    const error = value ? validateArg(value, input.type) : null;
+                                    return (
+                                        <div key={idx} className="space-y-1">
+                                            <div className="flex items-center gap-1.5">
+                                                <span className="text-[10px] text-[#606060]">{key}</span>
+                                                <span
+                                                    className="text-[9px] font-mono px-1 py-0.5 rounded"
+                                                    style={{
+                                                        color: getTypeColor(input.type),
+                                                        backgroundColor: getTypeColor(input.type) + "15"
+                                                    }}
+                                                >
+                                                    {input.type}
+                                                </span>
+                                                {error && <span className="text-[9px] text-red-400">{error}</span>}
+                                            </div>
+                                            <input
+                                                type="text"
+                                                placeholder={input.type.startsWith("uint") || input.type.startsWith("int") ? "Enter number..." : `Enter ${input.type}...`}
+                                                value={value}
+                                                onChange={(e) => setArgs({ ...args, [key]: e.target.value })}
+                                                className={`w-full px-2 py-1.5 text-[11px] font-mono bg-[#0a0a0a] border rounded-md text-white placeholder:text-[#404040] focus:outline-none transition-colors ${
+                                                    error ? "border-red-500/50 focus:border-red-500" : "border-[#222] focus:border-[#FFC800]/50"
+                                                }`}
+                                            />
                                         </div>
-                                        <input
-                                            type="text"
-                                            placeholder={`Enter ${input.type}...`}
-                                            value={args[input.name || `arg${idx}`] || ""}
-                                            onChange={(e) => setArgs({ ...args, [input.name || `arg${idx}`]: e.target.value })}
-                                            className="w-full px-2 py-1.5 text-[11px] font-mono bg-[#0a0a0a] border border-[#222] rounded-md text-white placeholder:text-[#404040] focus:border-[#FFC800]/50 focus:outline-none transition-colors"
-                                        />
-                                    </div>
-                                ))}
+                                    );
+                                })}
                             </div>
 
                             <motion.button
@@ -407,6 +448,7 @@ export default function Sidebar() {
         createFile, createSolidityFile, renameFile, deleteFile, createFolder, deleteFolder,
         buildStatus, compileResult, verifyResult, deployResult,
         compile, verify, deploy,
+        constructorArgs, setConstructorArgs, constructorInputs,
         walletAddress, walletBalance, isWalletConnected, connectWallet, disconnectWallet,
         callContractFunction, getContractFunctions, resetDeployment,
     } = useProject();
@@ -986,6 +1028,46 @@ export default function Sidebar() {
                                                 <span className="text-[#505050]">Hash</span>
                                                 <span className="text-[#FFC800] font-mono">{compileResult.hash?.slice(0, 12)}...</span>
                                             </div>
+                                        </div>
+                                    </motion.div>
+                                )}
+                            </AnimatePresence>
+
+                            {/* Constructor Args */}
+                            <AnimatePresence>
+                                {compileResult?.success && constructorInputs.length > 0 && !deployResult?.success && (
+                                    <motion.div
+                                        initial={{ opacity: 0, height: 0 }}
+                                        animate={{ opacity: 1, height: 'auto' }}
+                                        exit={{ opacity: 0, height: 0 }}
+                                        className="overflow-hidden"
+                                    >
+                                        <div className="p-2.5 rounded-lg bg-[#0a0a0a] border border-[#1a1a1a] space-y-2">
+                                            <div className="text-[10px] text-[#707070] font-medium uppercase tracking-wider">Constructor Args</div>
+                                            {constructorInputs.map((input, idx) => {
+                                                const key = input.name.startsWith("_") ? input.name : `_${input.name}`;
+                                                const value = constructorArgs[key] || "";
+                                                const isNumeric = input.type.startsWith("uint") || input.type.startsWith("int");
+                                                const hasError = isNumeric && value && !/^-?\d+$/.test(value);
+                                                return (
+                                                    <div key={idx} className="space-y-1">
+                                                        <div className="flex items-center gap-1.5">
+                                                            <span className="text-[10px] text-[#505050]">{input.name}</span>
+                                                            <span className="text-[9px] font-mono px-1 rounded bg-[#151515] text-[#606060]">{input.type}</span>
+                                                            {hasError && <span className="text-[9px] text-red-400">Must be a number</span>}
+                                                        </div>
+                                                        <input
+                                                            type="text"
+                                                            placeholder={isNumeric ? "Enter number..." : `Enter ${input.type}...`}
+                                                            value={value}
+                                                            onChange={(e) => setConstructorArgs({ ...constructorArgs, [key]: e.target.value })}
+                                                            className={`w-full px-2 py-1.5 text-[11px] font-mono bg-[#050505] border rounded-md text-white placeholder:text-[#353535] focus:outline-none transition-colors ${
+                                                                hasError ? "border-red-500/50 focus:border-red-500" : "border-[#1a1a1a] focus:border-[#FFC800]/50"
+                                                            }`}
+                                                        />
+                                                    </div>
+                                                );
+                                            })}
                                         </div>
                                     </motion.div>
                                 )}

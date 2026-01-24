@@ -28,7 +28,11 @@ interface DeployResponse {
   error?: string;
 }
 
-function getDefaultForType(type: string, contractName: string): string {
+function getDefaultForType(type: string, contractName: string, argName?: string, sourceAccount?: string): string {
+  // _caller is Solang's msg.sender equivalent — use the deployer identity
+  if (argName === '_caller' || argName === 'caller') {
+    return sourceAccount || 'tva-deployer';
+  }
   switch (type.toLowerCase()) {
     case 'string':
       return `Hello from ${contractName}`;
@@ -50,7 +54,7 @@ function getDefaultForType(type: string, contractName: string): string {
     case 'bool':
       return 'false';
     case 'address':
-      return 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF';
+      return sourceAccount || 'tva-deployer';
     case 'bytes':
     case 'bytes32':
       return '0000000000000000000000000000000000000000000000000000000000000000';
@@ -102,12 +106,26 @@ export async function POST(request: NextRequest): Promise<NextResponse<DeployRes
       'https://soroban-testnet.stellar.org',
     ];
 
+    // Always add the separator and _caller (Solang always injects this for msg.sender)
+    args.push('--');
+    args.push('--_caller', sourceAccount);
+
     // Append constructor args if provided
-    if (body.constructorArgs && typeof body.constructorArgs === 'object' && Object.keys(body.constructorArgs).length > 0) {
-      args.push('--');
+    if (body.constructorArgs && typeof body.constructorArgs === 'object') {
       for (const [argName, argValue] of Object.entries(body.constructorArgs)) {
-        const flag = argName.startsWith('-') ? argName : `--${argName}`;
-        args.push(flag, String(argValue));
+        const cleanName = argName.replace(/^-+/, '');
+        // Skip _caller — already added above
+        if (cleanName === '_caller' || cleanName === 'caller') continue;
+
+        const flag = `--${cleanName}`;
+        let value = String(argValue);
+
+        // Replace EVM-format addresses with the source account identity
+        if (value.startsWith('0x') && value.length === 42) {
+          value = sourceAccount;
+        }
+
+        args.push(flag, value);
       }
     }
 
@@ -134,14 +152,21 @@ export async function POST(request: NextRequest): Promise<NextResponse<DeployRes
       }
 
       if (missingArgs.length > 0) {
-        // Retry with default constructor arguments
+        // Retry with default constructor arguments (deduplicated)
         const retryArgs = [...args];
-        if (!retryArgs.includes('--')) {
-          retryArgs.push('--');
+        const seen = new Set<string>();
+        // Track args already in the command
+        for (let i = 0; i < retryArgs.length; i++) {
+          if (retryArgs[i].startsWith('--_') || retryArgs[i].startsWith('--')) {
+            seen.add(retryArgs[i]);
+          }
         }
         for (const arg of missingArgs) {
-          const defaultValue = getDefaultForType(arg.type, body.contractName);
-          retryArgs.push(`--${arg.name}`, defaultValue);
+          const flag = `--${arg.name}`;
+          if (seen.has(flag)) continue; // already present, skip
+          seen.add(flag);
+          const defaultValue = getDefaultForType(arg.type, body.contractName, arg.name, sourceAccount);
+          retryArgs.push(flag, defaultValue);
         }
 
         const retryResult = await execFileAsync(STELLAR_BIN, retryArgs, {

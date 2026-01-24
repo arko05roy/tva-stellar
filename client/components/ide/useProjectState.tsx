@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useState, useCallback, ReactNode } from "react";
+import React, { createContext, useContext, useState, useCallback, useMemo, ReactNode } from "react";
 
 // --- Schema Definitions ---
 
@@ -123,7 +123,7 @@ contract MyContract {
 pragma solidity ^0.8.0;
 
 contract Counter {
-    uint256 private count;
+    uint64 private count;
 
     function increment() public {
         count += 1;
@@ -134,7 +134,7 @@ contract Counter {
         count -= 1;
     }
 
-    function get() public view returns (uint256) {
+    function get() public view returns (uint64) {
         return count;
     }
 }
@@ -174,23 +174,22 @@ pragma solidity ^0.8.0;
 contract Token {
     string public name;
     string public symbol;
-    uint8 public decimals = 18;
-    uint256 public totalSupply;
+    uint128 public totalSupply;
 
-    mapping(address => uint256) public balanceOf;
-    mapping(address => mapping(address => uint256)) public allowance;
+    mapping(address => uint128) public balanceOf;
+    mapping(address => mapping(address => uint128)) public allowance;
 
-    event Transfer(address indexed from, address indexed to, uint256 value);
-    event Approval(address indexed owner, address indexed spender, uint256 value);
+    event Transfer(address indexed from, address indexed to, uint128 value);
+    event Approval(address indexed owner, address indexed spender, uint128 value);
 
-    constructor(string memory _name, string memory _symbol, uint256 _initialSupply) {
+    constructor(string memory _name, string memory _symbol, uint128 _initialSupply) {
         name = _name;
         symbol = _symbol;
-        totalSupply = _initialSupply * 10 ** decimals;
-        balanceOf[msg.sender] = totalSupply;
+        totalSupply = _initialSupply;
+        balanceOf[msg.sender] = _initialSupply;
     }
 
-    function transfer(address to, uint256 amount) public returns (bool) {
+    function transfer(address to, uint128 amount) public returns (bool) {
         require(balanceOf[msg.sender] >= amount, "Insufficient balance");
         balanceOf[msg.sender] -= amount;
         balanceOf[to] += amount;
@@ -198,13 +197,13 @@ contract Token {
         return true;
     }
 
-    function approve(address spender, uint256 amount) public returns (bool) {
+    function approve(address spender, uint128 amount) public returns (bool) {
         allowance[msg.sender][spender] = amount;
         emit Approval(msg.sender, spender, amount);
         return true;
     }
 
-    function transferFrom(address from, address to, uint256 amount) public returns (bool) {
+    function transferFrom(address from, address to, uint128 amount) public returns (bool) {
         require(balanceOf[from] >= amount, "Insufficient balance");
         require(allowance[from][msg.sender] >= amount, "Insufficient allowance");
         balanceOf[from] -= amount;
@@ -224,16 +223,16 @@ contract Token {
 pragma solidity ^0.8.0;
 
 contract Storage {
-    uint256 private value;
+    uint128 private value;
 
-    event ValueChanged(uint256 newValue);
+    event ValueChanged(uint128 newValue);
 
-    function store(uint256 _value) public {
+    function store(uint128 _value) public {
         value = _value;
         emit ValueChanged(_value);
     }
 
-    function retrieve() public view returns (uint256) {
+    function retrieve() public view returns (uint128) {
         return value;
     }
 }
@@ -323,6 +322,9 @@ interface ProjectContextType {
     compile: () => Promise<void>;
     verify: () => Promise<void>;
     deploy: () => Promise<void>;
+    constructorArgs: Record<string, string>;
+    setConstructorArgs: (args: Record<string, string>) => void;
+    constructorInputs: ABIInput[];
     // Wallet
     walletAddress: string | null;
     walletBalance: string | null;
@@ -351,6 +353,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     const [deployResult, setDeployResult] = useState<DeployResult | null>(null);
     const [walletAddress, setWalletAddress] = useState<string | null>(null);
     const [walletBalance, setWalletBalance] = useState<string | null>(null);
+    const [constructorArgs, setConstructorArgs] = useState<Record<string, string>>({});
 
     const isWalletConnected = walletAddress !== null;
 
@@ -547,6 +550,25 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
                 addLog({ type: "info", msg: `  WASM: ${result.size} bytes | SHA256: ${result.hash?.slice(0, 16)}...` });
                 if (result.abi) {
                     addLog({ type: "info", msg: `  ABI generated (${JSON.stringify(result.abi).length} bytes)` });
+                    // Populate constructor args with defaults
+                    const ctor = (result.abi as Array<{ type: string; inputs?: ABIInput[] }>)
+                        .find(e => e.type === "constructor");
+                    if (ctor?.inputs) {
+                        const defaults: Record<string, string> = {};
+                        const contractName = activeFile.name.replace(".sol", "");
+                        for (const input of ctor.inputs) {
+                            if (input.name === "_caller" || input.name === "caller") continue;
+                            const key = input.name.startsWith("_") ? input.name : `_${input.name}`;
+                            if (input.type === "string") defaults[key] = `Hello from ${contractName}`;
+                            else if (input.type.startsWith("uint") || input.type.startsWith("int")) defaults[key] = "0";
+                            else if (input.type === "bool") defaults[key] = "false";
+                            else if (input.type === "address") defaults[key] = "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF";
+                            else defaults[key] = "0";
+                        }
+                        setConstructorArgs(defaults);
+                    } else {
+                        setConstructorArgs({});
+                    }
                 }
                 if (result.warnings?.length) {
                     result.warnings.forEach((w) => addLog({ type: "warning", msg: `  ${w}` }));
@@ -628,31 +650,8 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         addLog({ type: "deploying", msg: `Deploying ${contractName} to Stellar testnet...` });
 
         try {
-            // Extract constructor args from ABI
-            const constructorArgs: Record<string, string> = {};
-            if (compileResult.abi && Array.isArray(compileResult.abi)) {
-                const constructorEntry = (compileResult.abi as Array<{ type: string; inputs?: Array<{ name: string; type: string }> }>)
-                    .find((entry) => entry.type === "constructor");
-                if (constructorEntry?.inputs) {
-                    for (const input of constructorEntry.inputs) {
-                        // Provide sensible defaults based on type
-                        const paramName = input.name.startsWith("_") ? input.name : `_${input.name}`;
-                        if (input.type === "string") {
-                            constructorArgs[paramName] = `Hello from ${contractName}`;
-                        } else if (input.type.startsWith("uint") || input.type.startsWith("int")) {
-                            constructorArgs[paramName] = "0";
-                        } else if (input.type === "bool") {
-                            constructorArgs[paramName] = "false";
-                        } else if (input.type === "address") {
-                            constructorArgs[paramName] = "0x0000000000000000000000000000000000000000";
-                        } else {
-                            constructorArgs[paramName] = "0";
-                        }
-                    }
-                    if (Object.keys(constructorArgs).length > 0) {
-                        addLog({ type: "info", msg: `  Constructor args: ${Object.entries(constructorArgs).map(([k, v]) => `${k}=${v}`).join(", ")}` });
-                    }
-                }
+            if (Object.keys(constructorArgs).length > 0) {
+                addLog({ type: "info", msg: `  Constructor args: ${Object.entries(constructorArgs).map(([k, v]) => `${k}=${v}`).join(", ")}` });
             }
 
             const response = await fetch("/api/deploy", {
@@ -680,7 +679,17 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
             setBuildStatus("error");
             addLog({ type: "error", msg: `Deploy request failed: ${err instanceof Error ? err.message : "Network error"}` });
         }
-    }, [activeFile, compileResult, addLog]);
+    }, [activeFile, compileResult, constructorArgs, addLog]);
+
+    // --- Constructor Inputs (derived from ABI) ---
+
+    const constructorInputs: ABIInput[] = useMemo(() => {
+        if (!compileResult?.abi || !Array.isArray(compileResult.abi)) return [];
+        const ctor = (compileResult.abi as Array<{ type: string; inputs?: ABIInput[] }>)
+            .find(e => e.type === "constructor");
+        if (!ctor?.inputs) return [];
+        return ctor.inputs.filter(i => i.name !== "_caller" && i.name !== "caller");
+    }, [compileResult]);
 
     // --- Wallet ---
 
@@ -766,10 +775,10 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
             return { success: false, error: "No contract deployed" };
         }
 
-        const argsArray = Object.values(args);
+        const argsDisplay = Object.entries(args).map(([, v]) => v).join(", ");
         addLog({
             type: isView ? "info" : "system",
-            msg: `Calling ${functionName}(${argsArray.join(", ")})...`
+            msg: `Calling ${functionName}(${argsDisplay})...`
         });
 
         try {
@@ -779,7 +788,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
                 body: JSON.stringify({
                     contractId: deployResult.contractId,
                     functionName,
-                    args: argsArray,
+                    namedArgs: args,
                     isView,
                 }),
             });
@@ -839,6 +848,9 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         compile,
         verify,
         deploy,
+        constructorArgs,
+        setConstructorArgs,
+        constructorInputs,
         walletAddress,
         walletBalance,
         isWalletConnected,

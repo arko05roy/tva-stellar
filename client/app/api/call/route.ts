@@ -11,7 +11,8 @@ const STELLAR_BIN = path.join(PROJECT_ROOT, 'tooling', 'bin', 'stellar');
 interface CallRequestBody {
   contractId: string;
   functionName: string;
-  args: string[];
+  args?: string[];
+  namedArgs?: Record<string, string>;
   isView: boolean;
 }
 
@@ -82,8 +83,8 @@ export async function POST(request: NextRequest): Promise<NextResponse<CallRespo
     // Determine source account
     const sourceAccount = process.env.TVA_SOURCE || 'tva-deployer';
 
-    // Build contract invoke command arguments
-    const args: string[] = [
+    // Build base invoke command arguments
+    const baseArgs: string[] = [
       'contract',
       'invoke',
       '--id',
@@ -98,23 +99,47 @@ export async function POST(request: NextRequest): Promise<NextResponse<CallRespo
       body.functionName,
     ];
 
-    // Add function arguments
-    if (body.args && Array.isArray(body.args) && body.args.length > 0) {
+    // Collect user-provided function arguments
+    const fnArgs: string[] = [];
+    if (body.namedArgs && typeof body.namedArgs === 'object' && Object.keys(body.namedArgs).length > 0) {
+      for (const [paramName, paramValue] of Object.entries(body.namedArgs)) {
+        if (paramName === '_caller' || paramName === 'caller') continue;
+        const flag = paramName.startsWith('-') ? paramName : `--${paramName}`;
+        fnArgs.push(flag, String(paramValue));
+      }
+    } else if (body.args && Array.isArray(body.args) && body.args.length > 0) {
       for (const arg of body.args) {
-        args.push(String(arg));
+        fnArgs.push(String(arg));
       }
     }
 
-    // For view functions, we might want to use --is-view flag if available
-    // Note: Soroban CLI may not require this distinction as it auto-detects
+    // Try without _caller first (works for auto-generated getters),
+    // retry with _caller if the function requires it (explicit functions using msg.sender)
+    let stdout: string;
+    let stderr: string;
+    try {
+      const result = await execFileAsync(STELLAR_BIN, [...baseArgs, ...fnArgs], {
+        cwd: PROJECT_ROOT,
+        timeout: 60000,
+      });
+      stdout = result.stdout.trim();
+      stderr = result.stderr.trim();
+    } catch (firstError: unknown) {
+      const firstErr = firstError as { message?: string; stderr?: string };
+      const errText = `${firstErr.message || ''} ${firstErr.stderr || ''}`;
 
-    const result = await execFileAsync(STELLAR_BIN, args, {
-      cwd: PROJECT_ROOT,
-      timeout: 60000,
-    });
-
-    const stdout = result.stdout.trim();
-    const stderr = result.stderr.trim();
+      // If the error indicates _caller is required, retry with it
+      if (errText.includes('_caller') || errText.includes('missing') || errText.includes('required argument')) {
+        const result = await execFileAsync(STELLAR_BIN, [...baseArgs, '--_caller', sourceAccount, ...fnArgs], {
+          cwd: PROJECT_ROOT,
+          timeout: 60000,
+        });
+        stdout = result.stdout.trim();
+        stderr = result.stderr.trim();
+      } else {
+        throw firstError;
+      }
+    }
 
     // Parse the result
     const parsedResult = parseResult(stdout);

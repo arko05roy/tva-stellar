@@ -19,8 +19,133 @@ const StellarIcon = () => (
     </svg>
 );
 
+// Soroban compatibility linter - flags unsupported types
+interface SorobanLintRule {
+    pattern: RegExp;
+    message: string;
+    severity: 'warning' | 'error';
+    fix?: { label: string; replacement: string | ((match: string) => string) };
+}
+
+const SOROBAN_LINT_RULES: SorobanLintRule[] = [
+    { pattern: /\buint256\b/, message: "uint256 is not natively supported on Soroban. Use uint128 instead.", severity: "warning", fix: { label: "Change to uint128", replacement: "uint128" } },
+    { pattern: /\bint256\b/, message: "int256 is not natively supported on Soroban. Use int128 instead.", severity: "warning", fix: { label: "Change to int128", replacement: "int128" } },
+    { pattern: /\buint8\b/, message: "uint8 is rounded to uint32 on Soroban. Use uint32 or uint64 instead.", severity: "warning", fix: { label: "Change to uint32", replacement: "uint32" } },
+    { pattern: /\buint16\b/, message: "uint16 is rounded to uint32 on Soroban. Use uint32 or uint64 instead.", severity: "warning", fix: { label: "Change to uint32", replacement: "uint32" } },
+    { pattern: /\bint8\b/, message: "int8 is rounded to int32 on Soroban. Use int32 or int64 instead.", severity: "warning", fix: { label: "Change to int32", replacement: "int32" } },
+    { pattern: /\bint16\b/, message: "int16 is rounded to int32 on Soroban. Use int32 or int64 instead.", severity: "warning", fix: { label: "Change to int32", replacement: "int32" } },
+    { pattern: /\b\d+\s*\*\*\s*[a-zA-Z_]\w*/, message: "Exponentiation with variables can overflow on Soroban. Use literal values instead.", severity: "error" },
+    { pattern: /\bbytes[1-9]\b|\bbytes[12][0-9]\b|\bbytes3[01]\b/, message: "Fixed-size bytes (bytes1-bytes31) have limited Soroban support. Use bytes32 or bytes.", severity: "warning", fix: { label: "Change to bytes32", replacement: "bytes32" } },
+];
+
+// Quick fix provider for Soroban lint markers
+function registerSorobanQuickFixes(monaco: any) {
+    monaco.languages.registerCodeActionProvider('solidity', {
+        provideCodeActions(model: any, range: any) {
+            const markers = monaco.editor.getModelMarkers({ resource: model.uri })
+                .filter((m: any) => m.source === 'TVA Soroban Linter' &&
+                    m.startLineNumber >= range.startLineNumber &&
+                    m.endLineNumber <= range.endLineNumber);
+
+            const actions: any[] = [];
+            for (const marker of markers) {
+                for (const rule of SOROBAN_LINT_RULES) {
+                    if (!rule.fix) continue;
+                    if (!marker.message.includes(rule.message)) continue;
+
+                    const matchedText = model.getValueInRange({
+                        startLineNumber: marker.startLineNumber,
+                        startColumn: marker.startColumn,
+                        endLineNumber: marker.endLineNumber,
+                        endColumn: marker.endColumn,
+                    });
+
+                    const replacement = typeof rule.fix.replacement === 'function'
+                        ? rule.fix.replacement(matchedText)
+                        : rule.fix.replacement;
+
+                    actions.push({
+                        title: `Soroban: ${rule.fix.label}`,
+                        diagnostics: [marker],
+                        kind: 'quickfix',
+                        isPreferred: true,
+                        edit: {
+                            edits: [{
+                                resource: model.uri,
+                                textEdit: {
+                                    range: new monaco.Range(
+                                        marker.startLineNumber,
+                                        marker.startColumn,
+                                        marker.endLineNumber,
+                                        marker.endColumn
+                                    ),
+                                    text: replacement,
+                                },
+                                versionId: model.getVersionId(),
+                            }],
+                        },
+                    });
+                }
+            }
+            return { actions, dispose: () => {} };
+        },
+    });
+}
+
+function runSorobanLinter(monaco: any, model: any) {
+    if (!model) return;
+    if (model.getLanguageId() !== 'solidity') {
+        monaco.editor.setModelMarkers(model, 'soroban-lint', []);
+        return;
+    }
+    const markers: any[] = [];
+    const lineCount = model.getLineCount();
+    for (let lineNum = 1; lineNum <= lineCount; lineNum++) {
+        const lineContent = model.getLineContent(lineNum);
+        // Skip comments
+        const trimmed = lineContent.trim();
+        if (trimmed.startsWith('//') || trimmed.startsWith('*') || trimmed.startsWith('/*')) continue;
+        for (const rule of SOROBAN_LINT_RULES) {
+            let match: RegExpExecArray | null;
+            const regex = new RegExp(rule.pattern.source, 'g');
+            while ((match = regex.exec(lineContent)) !== null) {
+                markers.push({
+                    severity: rule.severity === 'error'
+                        ? monaco.MarkerSeverity.Error
+                        : monaco.MarkerSeverity.Warning,
+                    message: `[Soroban] ${rule.message}`,
+                    startLineNumber: lineNum,
+                    startColumn: match.index + 1,
+                    endLineNumber: lineNum,
+                    endColumn: match.index + match[0].length + 1,
+                    source: 'TVA Soroban Linter',
+                });
+            }
+        }
+    }
+    monaco.editor.setModelMarkers(model, 'soroban-lint', markers);
+}
+
 export default function CodeEditor() {
     const { activeFile, updateFileContent } = useProject();
+    const monacoRef = React.useRef<any>(null);
+    const editorRef = React.useRef<any>(null);
+
+    // Re-run linter when file content changes
+    React.useEffect(() => {
+        if (monacoRef.current && editorRef.current) {
+            const model = editorRef.current.getModel();
+            if (model) runSorobanLinter(monacoRef.current, model);
+        }
+    }, [activeFile?.content, activeFile?.id]);
+
+    const handleEditorDidMount = (editor: any, monaco: any) => {
+        monacoRef.current = monaco;
+        editorRef.current = editor;
+        const model = editor.getModel();
+        if (model) runSorobanLinter(monaco, model);
+    };
+
     const handleEditorWillMount = (monaco: any) => {
         if (monaco) {
             // Register Solidity language
@@ -438,6 +563,9 @@ export default function CodeEditor() {
                     'editorIndentGuide.activeBackground': '#222222',
                 }
             });
+
+            // Register quick fix code actions for Soroban linting
+            registerSorobanQuickFixes(monaco);
         }
     };
 
@@ -571,6 +699,7 @@ export default function CodeEditor() {
             <div className="flex-1 relative">
                 <Editor
                     beforeMount={handleEditorWillMount}
+                    onMount={handleEditorDidMount}
                     height="100%"
                     defaultLanguage="solidity"
                     language={getLanguageFromFile(activeFile.name, activeFile.type)}
