@@ -8,65 +8,100 @@ interface SidebarProps {
     activeView: "explorer" | "search" | "git" | "debug" | "extensions";
 }
 
-// ─── ICONS ────────────────────────────────────────────────────────────────────
+// ─── ICONS (Larger sizes) ─────────────────────────────────────────────────────
 
-const ChevronIcon = ({ open, size = 10 }: { open: boolean; size?: number }) => (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
-        style={{ transform: open ? "rotate(90deg)" : "rotate(0deg)", transition: "transform 0.15s ease" }}>
+const ChevronIcon = ({ open }: { open: boolean }) => (
+    <motion.svg
+        width={14}
+        height={14}
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2.5"
+        initial={false}
+        animate={{ rotate: open ? 90 : 0 }}
+        transition={{ duration: 0.2, ease: [0.4, 0, 0.2, 1] }}
+        className="shrink-0"
+    >
         <path d="M9 18l6-6-6-6" />
-    </svg>
+    </motion.svg>
 );
 
-const FileTypeIcon = ({ name }: { name: string }) => {
+const FileTypeIcon = ({ name, isActive }: { name: string; isActive?: boolean }) => {
     const ext = name.split(".").pop() || "";
-    const config: Record<string, { color: string; label: string }> = {
-        sol: { color: "#FFC800", label: "SOL" },
-        rs: { color: "#DEA584", label: "RS" },
-        ts: { color: "#3178C6", label: "TS" },
-        js: { color: "#F7DF1E", label: "JS" },
-        json: { color: "#6D6D6D", label: "{}" },
-        md: { color: "#519ABA", label: "MD" },
+    const config: Record<string, { color: string; label: string; glow?: string }> = {
+        sol: { color: "#FFC800", label: "◆", glow: "rgba(255, 200, 0, 0.5)" },
+        rs: { color: "#DEA584", label: "RS", glow: "rgba(222, 165, 132, 0.4)" },
+        ts: { color: "#3178C6", label: "TS", glow: "rgba(49, 120, 198, 0.4)" },
+        js: { color: "#F7DF1E", label: "JS", glow: "rgba(247, 223, 30, 0.4)" },
+        json: { color: "#9B7FFF", label: "{}", glow: "rgba(155, 127, 255, 0.4)" },
+        md: { color: "#519ABA", label: "◇", glow: "rgba(81, 154, 186, 0.4)" },
     };
     const c = config[ext] || { color: "#4a4a4a", label: ext.slice(0, 2).toUpperCase() };
     return (
-        <div className="w-[18px] h-[18px] rounded-[3px] flex items-center justify-center shrink-0"
-            style={{ backgroundColor: `${c.color}15`, border: `1px solid ${c.color}30` }}>
-            <span style={{ color: c.color, fontSize: "7px", fontWeight: 700, letterSpacing: "-0.02em" }}>{c.label}</span>
-        </div>
+        <motion.div
+            className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0 relative"
+            style={{
+                background: `linear-gradient(135deg, ${c.color}10 0%, ${c.color}20 100%)`,
+                border: `1px solid ${c.color}30`,
+                boxShadow: isActive ? `0 0 16px ${c.glow || c.color + '40'}` : 'none'
+            }}
+            whileHover={{
+                scale: 1.08,
+                boxShadow: `0 0 12px ${c.glow || c.color + '30'}`
+            }}
+            transition={{ duration: 0.15 }}
+        >
+            <span style={{
+                color: c.color,
+                fontSize: ext === 'sol' || ext === 'md' ? "14px" : "10px",
+                fontWeight: 700,
+                textShadow: isActive ? `0 0 8px ${c.color}` : 'none'
+            }}>{c.label}</span>
+        </motion.div>
     );
 };
 
 const FolderGlyph = ({ open }: { open: boolean }) => (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" className="shrink-0">
-        <path d="M3 7V17C3 18.1 3.9 19 5 19H19C20.1 19 21 18.1 21 17V9C21 7.9 20.1 7 19 7H13L11 5H5C3.9 5 3 5.9 3 7Z"
-            fill={open ? "#FFC800" : "#3a3a3a"} opacity={open ? 1 : 0.7} />
-    </svg>
+    <motion.div
+        className="relative shrink-0"
+        animate={{ scale: open ? 1.05 : 1 }}
+        transition={{ duration: 0.15 }}
+    >
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+            <defs>
+                <linearGradient id="folderGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stopColor={open ? "#FFC800" : "#3a3a3a"} />
+                    <stop offset="100%" stopColor={open ? "#E5B400" : "#2a2a2a"} />
+                </linearGradient>
+            </defs>
+            <path
+                d="M3 7V17C3 18.1 3.9 19 5 19H19C20.1 19 21 18.1 21 17V9C21 7.9 20.1 7 19 7H13L11 5H5C3.9 5 3 5.9 3 7Z"
+                fill="url(#folderGrad)"
+                opacity={open ? 1 : 0.6}
+            />
+        </svg>
+        {open && (
+            <motion.div
+                className="absolute inset-0"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                style={{ boxShadow: '0 0 12px rgba(255, 200, 0, 0.4)' }}
+            />
+        )}
+    </motion.div>
 );
 
-const CopyIcon = () => (
-    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+const CopyIcon = ({ size = 16 }: { size?: number }) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
         <rect x="9" y="9" width="13" height="13" rx="2" />
         <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
     </svg>
 );
 
-const ExternalLinkIcon = () => (
-    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+const ExternalLinkIcon = ({ size = 14 }: { size?: number }) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
         <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3" />
-    </svg>
-);
-
-const WalletIcon = () => (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-        <path d="M21 5H3a1 1 0 00-1 1v12a1 1 0 001 1h18a1 1 0 001-1V6a1 1 0 00-1-1z" />
-        <path d="M16 14a2 2 0 100-4 2 2 0 000 4z" fill="currentColor" />
-        <path d="M2 9h20" />
-    </svg>
-);
-
-const DisconnectIcon = () => (
-    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-        <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9" />
     </svg>
 );
 
@@ -92,18 +127,18 @@ function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {
     return (
         <motion.div
             ref={ref}
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.95 }}
-            transition={{ duration: 0.1 }}
-            className="fixed z-[9999] py-1 min-w-[140px] bg-[#1a1a1a] border border-[#2a2a2a] rounded-md shadow-2xl shadow-black/50"
+            initial={{ opacity: 0, scale: 0.95, y: -4 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95, y: -4 }}
+            transition={{ duration: 0.15 }}
+            className="fixed z-[9999] py-2 min-w-[160px] bg-[#0a0a0a] border border-[#222] rounded-xl shadow-2xl shadow-black/60"
             style={{ top: y, left: x }}
         >
             {items.map((item, i) => (
                 <button key={i} onClick={() => { item.action(); onClose(); }}
-                    className={`w-full text-left px-3 py-1.5 text-[12px] transition-colors ${item.danger
+                    className={`w-full text-left px-4 py-2.5 text-[14px] font-medium transition-colors ${item.danger
                         ? "text-[#EF4444] hover:bg-[#EF4444]/10"
-                        : "text-[#b0b0b0] hover:bg-[#252525] hover:text-white"
+                        : "text-[#909090] hover:bg-[#1a1a1a] hover:text-white"
                         }`}>
                     {item.label}
                 </button>
@@ -128,7 +163,7 @@ function InlineInput({ initial, onSubmit, onCancel }: { initial: string; onSubmi
                 if (e.key === "Escape") onCancel();
             }}
             onBlur={() => { if (value.trim()) onSubmit(value.trim()); else onCancel(); }}
-            className="w-full bg-[#0a0a0a] border border-[#FFC800]/50 rounded px-1.5 py-0.5 text-[12px] text-white outline-none"
+            className="w-full bg-[#0a0a0a] border border-[#FFC800]/50 rounded-lg px-3 py-1.5 text-[14px] text-white outline-none focus:border-[#FFC800] transition-colors"
             spellCheck={false}
         />
     );
@@ -145,13 +180,13 @@ export default function Sidebar({ activeView }: SidebarProps) {
         walletAddress, walletBalance, isWalletConnected, connectWallet, disconnectWallet,
     } = useProject();
 
-    const [activeTab, setActiveTab] = useState<"files" | "build">("files");
     const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set(["root"]));
     const [contextMenu, setContextMenu] = useState<ContextMenuProps | null>(null);
-    const [creatingFile, setCreatingFile] = useState<string | null>(null); // parent folder ID
+    const [creatingFile, setCreatingFile] = useState<string | null>(null);
     const [creatingFolder, setCreatingFolder] = useState<string | null>(null);
     const [renamingId, setRenamingId] = useState<string | null>(null);
     const [copied, setCopied] = useState(false);
+    const [buildExpanded, setBuildExpanded] = useState(true);
 
     const toggleFolder = (id: string) => {
         setExpandedFolders((prev) => {
@@ -174,12 +209,12 @@ export default function Sidebar({ activeView }: SidebarProps) {
         const isRenaming = renamingId === file.id;
 
         return (
-            <div
-                className={`group flex items-center gap-1.5 py-[3px] pr-2 cursor-pointer transition-all text-[12px] ${isActive
-                    ? "bg-[#FFC800]/8 text-[#FFC800]"
-                    : "text-[#808080] hover:text-[#c0c0c0] hover:bg-[#ffffff06]"
+            <motion.div
+                className={`group flex items-center gap-3 py-2 pr-4 cursor-pointer relative ${isActive
+                    ? "text-[#FFC800]"
+                    : "text-[#707070] hover:text-[#b0b0b0]"
                     }`}
-                style={{ paddingLeft: `${depth * 14 + 16}px` }}
+                style={{ paddingLeft: `${depth * 20 + 24}px` }}
                 onClick={() => !isRenaming && setActiveFileId(file.id)}
                 onDoubleClick={() => setRenamingId(file.id)}
                 onContextMenu={(e) => {
@@ -192,9 +227,33 @@ export default function Sidebar({ activeView }: SidebarProps) {
                         ]
                     });
                 }}
+                initial={false}
+                animate={{
+                    backgroundColor: isActive ? "rgba(255, 200, 0, 0.08)" : "transparent"
+                }}
+                whileHover={{
+                    backgroundColor: isActive ? "rgba(255, 200, 0, 0.12)" : "rgba(255, 255, 255, 0.03)"
+                }}
+                transition={{ duration: 0.15 }}
             >
-                {isActive && <div className="absolute left-0 w-[2px] h-4 bg-[#FFC800] rounded-r" />}
-                <FileTypeIcon name={file.name} />
+                {/* Active indicator */}
+                <AnimatePresence>
+                    {isActive && (
+                        <motion.div
+                            className="absolute left-0 top-2 bottom-2 w-[3px] rounded-r-full"
+                            style={{
+                                background: 'linear-gradient(180deg, #FFC800 0%, #E5B400 100%)',
+                                boxShadow: '0 0 12px rgba(255, 200, 0, 0.6)'
+                            }}
+                            initial={{ scaleY: 0, opacity: 0 }}
+                            animate={{ scaleY: 1, opacity: 1 }}
+                            exit={{ scaleY: 0, opacity: 0 }}
+                            transition={{ duration: 0.2 }}
+                        />
+                    )}
+                </AnimatePresence>
+
+                <FileTypeIcon name={file.name} isActive={isActive} />
                 {isRenaming ? (
                     <InlineInput
                         initial={file.name}
@@ -202,20 +261,25 @@ export default function Sidebar({ activeView }: SidebarProps) {
                         onCancel={() => setRenamingId(null)}
                     />
                 ) : (
-                    <span className="truncate select-none">{file.name}</span>
+                    <span
+                        className="truncate select-none text-[14px] font-medium"
+                        style={{ textShadow: isActive ? '0 0 16px rgba(255, 200, 0, 0.4)' : 'none' }}
+                    >
+                        {file.name}
+                    </span>
                 )}
-            </div>
+            </motion.div>
         );
     };
 
     const RenderFolder = ({ folder, depth = 0 }: { folder: Folder; depth?: number }) => {
         const isExpanded = expandedFolders.has(folder.id);
         return (
-            <div>
+            <div className="relative">
                 {depth > 0 && (
-                    <div
-                        className="group flex items-center gap-1.5 py-[3px] pr-2 cursor-pointer text-[12px] text-[#808080] hover:text-[#c0c0c0] hover:bg-[#ffffff06] transition-all"
-                        style={{ paddingLeft: `${depth * 14 + 16}px` }}
+                    <motion.div
+                        className="group flex items-center gap-3 py-2 pr-4 cursor-pointer text-[#606060] hover:text-[#a0a0a0] relative"
+                        style={{ paddingLeft: `${depth * 20 + 24}px` }}
                         onClick={() => toggleFolder(folder.id)}
                         onContextMenu={(e) => {
                             e.preventDefault();
@@ -228,11 +292,12 @@ export default function Sidebar({ activeView }: SidebarProps) {
                                 ]
                             });
                         }}
+                        whileHover={{ backgroundColor: "rgba(255, 255, 255, 0.02)" }}
                     >
                         <ChevronIcon open={isExpanded} />
                         <FolderGlyph open={isExpanded} />
-                        <span className="truncate select-none font-medium">{folder.name}</span>
-                    </div>
+                        <span className="truncate select-none text-[14px] font-semibold">{folder.name}</span>
+                    </motion.div>
                 )}
                 <AnimatePresence>
                     {(depth === 0 || isExpanded) && (
@@ -240,7 +305,7 @@ export default function Sidebar({ activeView }: SidebarProps) {
                             initial={{ height: 0, opacity: 0 }}
                             animate={{ height: "auto", opacity: 1 }}
                             exit={{ height: 0, opacity: 0 }}
-                            transition={{ duration: 0.12 }}
+                            transition={{ duration: 0.2, ease: [0.4, 0, 0.2, 1] }}
                             className="overflow-hidden"
                         >
                             {folder.folders.map((sub) => (
@@ -250,7 +315,7 @@ export default function Sidebar({ activeView }: SidebarProps) {
                                 <RenderFile key={file.id} file={file} depth={(depth || 0) + 1} />
                             ))}
                             {creatingFile === folder.id && (
-                                <div style={{ paddingLeft: `${((depth || 0) + 1) * 14 + 16}px` }} className="py-1 pr-2">
+                                <div style={{ paddingLeft: `${((depth || 0) + 1) * 20 + 24}px` }} className="py-2 pr-4">
                                     <InlineInput
                                         initial="NewContract.sol"
                                         onSubmit={(v) => { createFile(v, folder.id); setCreatingFile(null); }}
@@ -259,7 +324,7 @@ export default function Sidebar({ activeView }: SidebarProps) {
                                 </div>
                             )}
                             {creatingFolder === folder.id && (
-                                <div style={{ paddingLeft: `${((depth || 0) + 1) * 14 + 16}px` }} className="py-1 pr-2">
+                                <div style={{ paddingLeft: `${((depth || 0) + 1) * 20 + 24}px` }} className="py-2 pr-4">
                                     <InlineInput
                                         initial="new-folder"
                                         onSubmit={(v) => { createFolder(v, folder.id); setCreatingFolder(null); }}
@@ -279,8 +344,8 @@ export default function Sidebar({ activeView }: SidebarProps) {
     const PipelineStep = ({ label, status, step }: { label: string; status: "idle" | "active" | "done" | "error"; step: number }) => {
         const colors = { idle: "#3a3a3a", active: "#FFC800", done: "#22C55E", error: "#EF4444" };
         return (
-            <div className="flex items-center gap-2">
-                <div className="relative flex items-center justify-center w-5 h-5">
+            <div className="flex items-center gap-3">
+                <div className="relative flex items-center justify-center w-7 h-7">
                     {status === "active" ? (
                         <motion.div
                             className="w-full h-full rounded-full border-2"
@@ -291,13 +356,13 @@ export default function Sidebar({ activeView }: SidebarProps) {
                     ) : (
                         <div className="w-full h-full rounded-full border-2 flex items-center justify-center"
                             style={{ borderColor: colors[status] }}>
-                            {status === "done" && <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke={colors.done} strokeWidth="3"><path d="M5 12l5 5L20 7" /></svg>}
-                            {status === "error" && <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke={colors.error} strokeWidth="3"><path d="M18 6L6 18M6 6l12 12" /></svg>}
-                            {status === "idle" && <span className="text-[8px] text-[#3a3a3a] font-bold">{step}</span>}
+                            {status === "done" && <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={colors.done} strokeWidth="3"><path d="M5 12l5 5L20 7" /></svg>}
+                            {status === "error" && <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={colors.error} strokeWidth="3"><path d="M18 6L6 18M6 6l12 12" /></svg>}
+                            {status === "idle" && <span className="text-[11px] text-[#3a3a3a] font-bold">{step}</span>}
                         </div>
                     )}
                 </div>
-                <span className={`text-[11px] font-medium ${status === "active" ? "text-[#FFC800]" : status === "done" ? "text-[#22C55E]" : status === "error" ? "text-[#EF4444]" : "text-[#555]"}`}>
+                <span className={`text-[14px] font-medium ${status === "active" ? "text-[#FFC800]" : status === "done" ? "text-[#22C55E]" : status === "error" ? "text-[#EF4444]" : "text-[#555]"}`}>
                     {label}
                 </span>
             </div>
@@ -326,344 +391,348 @@ export default function Sidebar({ activeView }: SidebarProps) {
         return "idle" as const;
     };
 
-    // ─── WALLET VIEW ─────────────────────────────────────────────────────────
+    // ─── BLOCKCHAIN VIEW (Wallet + Explorer combined) ─────────────────────────
 
-    if (activeView === "extensions") {
+    if (activeView === "extensions" || activeView === "debug") {
         return (
-            <div className="w-[272px] bg-[#000000] flex flex-col h-full border-r border-[#111] select-none">
-                <div className="h-9 px-3 flex items-center text-[10px] font-semibold text-[#555] uppercase tracking-[0.12em] border-b border-[#111]">
-                    Wallet
+            <motion.div
+                className="w-[300px] flex flex-col h-full select-none relative overflow-hidden"
+                style={{ background: 'linear-gradient(180deg, #050505 0%, #000000 100%)' }}
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ duration: 0.3 }}
+            >
+                {/* Background effects */}
+                <div className="absolute inset-0 pointer-events-none">
+                    <div className="absolute -top-20 -left-20 w-48 h-48 bg-[#FFC800]/[0.03] rounded-full blur-3xl" />
+                    <div className="absolute right-0 top-0 bottom-0 w-[1px] bg-gradient-to-b from-[#FFC800]/15 via-[#1a1a1a] to-transparent" />
                 </div>
-                <div className="flex-1 flex flex-col p-4">
-                    {isWalletConnected ? (
-                        <div className="space-y-4">
-                            {/* Connected status */}
-                            <div className="flex items-center gap-2">
-                                <div className="w-2 h-2 rounded-full bg-[#22C55E] shadow-[0_0_6px_#22C55E]" />
-                                <span className="text-[11px] text-[#22C55E] font-medium">Connected</span>
-                            </div>
 
-                            {/* Address card */}
-                            <div className="p-3 rounded-lg bg-[#0a0a0a] border border-[#1a1a1a] space-y-2">
-                                <div className="text-[9px] text-[#444] uppercase tracking-wider font-semibold">Address</div>
-                                <div className="flex items-center gap-2">
-                                    <span className="text-[11px] font-mono text-[#808080] truncate flex-1">
-                                        {walletAddress}
-                                    </span>
-                                    <button onClick={() => handleCopy(walletAddress || "")}
-                                        className="text-[#444] hover:text-white transition-colors shrink-0">
-                                        <CopyIcon />
-                                    </button>
-                                </div>
-                            </div>
-
-                            {/* Balance */}
-                            <div className="p-3 rounded-lg bg-[#0a0a0a] border border-[#1a1a1a]">
-                                <div className="text-[9px] text-[#444] uppercase tracking-wider font-semibold mb-1">Balance</div>
-                                <div className="text-[20px] font-mono text-[#FFC800] font-bold">{walletBalance} <span className="text-[11px] text-[#666]">XLM</span></div>
-                            </div>
-
-                            {/* Network */}
-                            <div className="p-3 rounded-lg bg-[#0a0a0a] border border-[#1a1a1a]">
-                                <div className="text-[9px] text-[#444] uppercase tracking-wider font-semibold mb-1">Network</div>
-                                <div className="flex items-center gap-2">
-                                    <div className="w-[6px] h-[6px] rounded-full bg-[#22C55E]" />
-                                    <span className="text-[11px] text-[#808080]">Stellar Testnet</span>
-                                    <span className="ml-auto text-[9px] text-[#333] font-mono">Chain 0x5448D640</span>
-                                </div>
-                            </div>
-
-                            {/* Disconnect */}
-                            <motion.button onClick={disconnectWallet}
-                                className="w-full h-9 text-[11px] font-semibold text-[#666] border border-[#222] rounded-md hover:border-[#EF4444]/40 hover:text-[#EF4444] transition-all"
-                                whileTap={{ scale: 0.98 }}>
-                                Disconnect
-                            </motion.button>
-                        </div>
-                    ) : (
-                        <div className="flex-1 flex flex-col items-center justify-center gap-6">
-                            {/* Big wallet icon */}
-                            <div className="w-16 h-16 rounded-2xl bg-[#FFC800]/10 border border-[#FFC800]/20 flex items-center justify-center">
-                                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#FFC800" strokeWidth="1.5">
-                                    <rect x="2" y="6" width="20" height="14" rx="2" />
-                                    <path d="M2 10h20" />
-                                    <circle cx="16" cy="14" r="2" />
-                                </svg>
-                            </div>
-
-                            <div className="text-center space-y-1">
-                                <div className="text-[13px] text-white font-medium">Connect Wallet</div>
-                                <div className="text-[11px] text-[#555] leading-relaxed max-w-[180px]">
-                                    Connect MetaMask to deploy contracts and interact with Stellar testnet
-                                </div>
-                            </div>
-
-                            {/* Prominent connect button */}
-                            <motion.button onClick={connectWallet}
-                                className="w-full h-11 text-[12px] font-bold text-black bg-[#FFC800] rounded-lg shadow-[0_0_20px_rgba(255,200,0,0.15)] hover:shadow-[0_0_30px_rgba(255,200,0,0.25)] transition-shadow"
-                                whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}>
-                                Connect MetaMask
-                            </motion.button>
-
-                            <div className="text-[9px] text-[#333] text-center">
-                                TVA Chain ID: 1414676736
-                            </div>
-                        </div>
-                    )}
+                {/* Header */}
+                <div className="relative h-14 flex items-center px-5 border-b border-[#151515] shrink-0">
+                    <div className="absolute bottom-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-[#FFC800]/20 to-transparent" />
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#FFC800" strokeWidth="1.5" className="mr-3 opacity-70">
+                        <rect x="2" y="6" width="20" height="14" rx="2" />
+                        <path d="M2 10h20" />
+                        <circle cx="16" cy="14" r="2" />
+                    </svg>
+                    <span className="text-[13px] font-semibold text-[#505050] uppercase tracking-[0.15em]">
+                        Blockchain
+                    </span>
                 </div>
-            </div>
-        );
-    }
 
-    // ─── EXPLORER VIEW ────────────────────────────────────────────────────────
+                <div className="flex-1 overflow-y-auto p-5 space-y-5 relative z-10">
+                    {/* Wallet Section */}
+                    <div className="space-y-4">
+                        <div className="text-[11px] text-[#404040] uppercase tracking-[0.2em] font-semibold">Wallet</div>
 
-    if (activeView === "debug") {
-        return (
-            <div className="w-[272px] bg-[#000000] flex flex-col h-full border-r border-[#111] select-none">
-                <div className="h-9 px-3 flex items-center text-[10px] font-semibold text-[#555] uppercase tracking-[0.12em] border-b border-[#111]">
-                    Explorer
-                </div>
-                <div className="flex-1 p-4 space-y-3">
-                    {/* Deployed contracts */}
-                    {deployResult?.success ? (
-                        <div className="space-y-3">
-                            <div className="text-[9px] text-[#444] uppercase tracking-wider font-semibold">Deployed Contracts</div>
-                            <div className="p-3 rounded-lg bg-[#0a0a0a] border border-[#1a1a1a] space-y-2">
-                                <div className="text-[11px] text-white font-medium">{deployResult.contractId?.slice(0, 8)}...{deployResult.contractId?.slice(-4)}</div>
+                        {isWalletConnected ? (
+                            <div className="space-y-4">
+                                {/* Status */}
+                                <div className="flex items-center gap-3">
+                                    <div className="w-3 h-3 rounded-full bg-[#22C55E] shadow-[0_0_10px_#22C55E]" />
+                                    <span className="text-[14px] text-[#22C55E] font-medium">Connected</span>
+                                </div>
+
+                                {/* Address */}
+                                <div className="p-4 rounded-xl bg-[#0a0a0a] border border-[#1a1a1a] space-y-2">
+                                    <div className="text-[11px] text-[#404040] uppercase tracking-wider font-semibold">Address</div>
+                                    <div className="flex items-center gap-3">
+                                        <span className="text-[13px] font-mono text-[#707070] truncate flex-1">
+                                            {walletAddress}
+                                        </span>
+                                        <motion.button
+                                            onClick={() => handleCopy(walletAddress || "")}
+                                            className="text-[#505050] hover:text-[#FFC800] transition-colors p-1"
+                                            whileHover={{ scale: 1.1 }}
+                                            whileTap={{ scale: 0.9 }}
+                                        >
+                                            <CopyIcon />
+                                        </motion.button>
+                                    </div>
+                                </div>
+
+                                {/* Balance */}
+                                <div className="p-4 rounded-xl bg-[#0a0a0a] border border-[#1a1a1a]">
+                                    <div className="text-[11px] text-[#404040] uppercase tracking-wider font-semibold mb-2">Balance</div>
+                                    <div className="text-[28px] font-mono text-[#FFC800] font-bold">
+                                        {walletBalance}
+                                        <span className="text-[14px] text-[#505050] ml-2">XLM</span>
+                                    </div>
+                                </div>
+
+                                {/* Network */}
+                                <div className="p-4 rounded-xl bg-[#0a0a0a] border border-[#1a1a1a]">
+                                    <div className="text-[11px] text-[#404040] uppercase tracking-wider font-semibold mb-2">Network</div>
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-2.5 h-2.5 rounded-full bg-[#22C55E]" />
+                                        <span className="text-[14px] text-[#808080]">Stellar Testnet</span>
+                                    </div>
+                                </div>
+
+                                {/* Disconnect */}
+                                <motion.button
+                                    onClick={disconnectWallet}
+                                    className="w-full h-12 text-[14px] font-semibold text-[#606060] border border-[#252525] rounded-xl hover:border-[#EF4444]/50 hover:text-[#EF4444] transition-all"
+                                    whileTap={{ scale: 0.98 }}
+                                >
+                                    Disconnect Wallet
+                                </motion.button>
+                            </div>
+                        ) : (
+                            <div className="py-8 flex flex-col items-center gap-5">
+                                <div className="w-20 h-20 rounded-2xl bg-[#FFC800]/10 border border-[#FFC800]/20 flex items-center justify-center">
+                                    <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#FFC800" strokeWidth="1.5">
+                                        <rect x="2" y="6" width="20" height="14" rx="2" />
+                                        <path d="M2 10h20" />
+                                        <circle cx="16" cy="14" r="2" />
+                                    </svg>
+                                </div>
+                                <div className="text-center space-y-2">
+                                    <div className="text-[16px] text-white font-medium">Connect Wallet</div>
+                                    <div className="text-[13px] text-[#505050] leading-relaxed max-w-[200px]">
+                                        Connect to deploy contracts on Stellar testnet
+                                    </div>
+                                </div>
+                                <motion.button
+                                    onClick={connectWallet}
+                                    className="w-full h-14 text-[15px] font-bold text-black bg-[#FFC800] rounded-xl shadow-[0_0_30px_rgba(255,200,0,0.2)]"
+                                    whileHover={{ scale: 1.02, boxShadow: '0 0 40px rgba(255, 200, 0, 0.3)' }}
+                                    whileTap={{ scale: 0.98 }}
+                                >
+                                    Connect MetaMask
+                                </motion.button>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Deployed Contracts Section */}
+                    {deployResult?.success && (
+                        <div className="space-y-4 pt-4 border-t border-[#151515]">
+                            <div className="text-[11px] text-[#404040] uppercase tracking-[0.2em] font-semibold">Deployed Contracts</div>
+                            <div className="p-4 rounded-xl bg-[#0a0a0a] border border-[#1a1a1a] space-y-3">
+                                <div className="text-[14px] text-white font-medium">
+                                    {deployResult.contractId?.slice(0, 12)}...{deployResult.contractId?.slice(-6)}
+                                </div>
                                 {deployResult.explorerUrl && (
-                                    <a href={deployResult.explorerUrl} target="_blank" rel="noopener noreferrer"
-                                        className="flex items-center gap-1.5 text-[10px] text-[#3B82F6] hover:text-[#60a5fa] transition-colors">
+                                    <a
+                                        href={deployResult.explorerUrl}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="flex items-center gap-2 text-[13px] text-[#3B82F6] hover:text-[#60a5fa] transition-colors"
+                                    >
                                         <ExternalLinkIcon />
-                                        <span>View on Stellar Expert</span>
+                                        <span>View on Explorer</span>
                                     </a>
                                 )}
                             </div>
                         </div>
-                    ) : (
-                        <div className="flex flex-col items-center justify-center h-full gap-3 opacity-50">
-                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#444" strokeWidth="1.5">
-                                <circle cx="12" cy="12" r="10" />
-                                <path d="M16.24 7.76l-2.12 6.36-6.36 2.12 2.12-6.36 6.36-2.12z" />
-                            </svg>
-                            <span className="text-[11px] text-[#444]">No deployed contracts yet</span>
-                            <span className="text-[10px] text-[#333]">Build and deploy to see transactions</span>
-                        </div>
                     )}
                 </div>
-            </div>
+            </motion.div>
         );
     }
 
-    // ─── SEARCH VIEW ──────────────────────────────────────────────────────────
+    // ─── SEARCH VIEW (minimal) ────────────────────────────────────────────────
 
     if (activeView === "search") {
         return (
-            <div className="w-[272px] bg-[#000000] flex flex-col h-full border-r border-[#111] select-none">
-                <div className="h-9 px-3 flex items-center text-[10px] font-semibold text-[#555] uppercase tracking-[0.12em] border-b border-[#111]">
-                    Search
+            <motion.div
+                className="w-[300px] flex flex-col h-full select-none relative overflow-hidden"
+                style={{ background: 'linear-gradient(180deg, #050505 0%, #000000 100%)' }}
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+            >
+                <div className="absolute right-0 top-0 bottom-0 w-[1px] bg-gradient-to-b from-[#FFC800]/15 via-[#1a1a1a] to-transparent" />
+                <div className="h-14 flex items-center px-5 border-b border-[#151515]">
+                    <span className="text-[13px] font-semibold text-[#505050] uppercase tracking-[0.15em]">Search</span>
                 </div>
                 <div className="flex-1 flex items-center justify-center">
-                    <span className="text-[11px] text-[#333]">Not available</span>
+                    <span className="text-[14px] text-[#303030]">Coming soon</span>
                 </div>
-            </div>
+            </motion.div>
         );
     }
 
-    // ─── FILES / BUILD (main views) ──────────────────────────────────────────
-
-    // Determine which internal tab based on activeView
-    const resolvedTab = activeView === "git" ? "build" : "files";
-    if (resolvedTab !== activeTab) {
-        // Sync internal tab with activity bar
-        if (resolvedTab === "build" && activeTab !== "build") setActiveTab("build");
-        if (resolvedTab === "files" && activeTab !== "files") setActiveTab("files");
-    }
+    // ─── WORKSPACE VIEW (Files + Build combined) ──────────────────────────────
 
     return (
-        <div className="w-[272px] bg-[#000000] flex flex-col h-full border-r border-[#111] select-none">
-
-            {/* ── HEADER ── */}
-            <div className="h-9 px-3 flex items-center text-[10px] font-semibold text-[#555] uppercase tracking-[0.12em] border-b border-[#111] shrink-0">
-                {activeTab === "files" ? "Files" : "Build & Deploy"}
+        <motion.div
+            className="w-[300px] flex flex-col h-full select-none relative overflow-hidden"
+            style={{ background: 'linear-gradient(180deg, #050505 0%, #000000 100%)' }}
+            initial={{ opacity: 0, x: -20 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
+        >
+            {/* Background effects */}
+            <div className="absolute inset-0 pointer-events-none">
+                <div className="absolute -top-20 -left-20 w-48 h-48 bg-[#FFC800]/[0.03] rounded-full blur-3xl" />
+                <div className="absolute right-0 top-0 bottom-0 w-[1px] bg-gradient-to-b from-[#FFC800]/15 via-[#1a1a1a] to-transparent" />
             </div>
 
-            {/* ── CONTENT ── */}
-            <div className="flex-1 overflow-y-auto overflow-x-hidden">
-                <AnimatePresence mode="wait">
-                    {activeTab === "files" && (
-                        <motion.div key="files" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.12 }}>
-                            {/* File tree header */}
-                            <div className="flex items-center justify-between px-3 h-7 border-b border-[#141414]">
-                                <span className="text-[10px] text-[#555] font-medium tracking-wide">WORKSPACE</span>
-                                <div className="flex items-center gap-0.5">
-                                    <button onClick={() => setCreatingFile("root")}
-                                        className="w-5 h-5 flex items-center justify-center rounded text-[#555] hover:text-[#FFC800] hover:bg-[#FFC800]/10 transition-colors"
-                                        title="New file">
-                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                            <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
-                                            <path d="M14 2v6h6M12 18v-6M9 15h6" />
-                                        </svg>
-                                    </button>
-                                    <button onClick={() => setCreatingFolder("root")}
-                                        className="w-5 h-5 flex items-center justify-center rounded text-[#555] hover:text-[#FFC800] hover:bg-[#FFC800]/10 transition-colors"
-                                        title="New folder">
-                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                            <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z" />
-                                            <path d="M12 11v6M9 14h6" />
-                                        </svg>
-                                    </button>
-                                </div>
-                            </div>
-
-                            {/* Tree */}
-                            <div className="py-1"
-                                onContextMenu={(e) => {
-                                    if (e.target === e.currentTarget) {
-                                        e.preventDefault();
-                                        setContextMenu({
-                                            x: e.clientX, y: e.clientY, onClose: () => setContextMenu(null),
-                                            items: [
-                                                { label: "New File", action: () => setCreatingFile("root") },
-                                                { label: "New Folder", action: () => setCreatingFolder("root") },
-                                            ]
-                                        });
-                                    }
-                                }}>
-                                <RenderFolder folder={project.root} depth={0} />
-                            </div>
-                        </motion.div>
-                    )}
-
-                    {activeTab === "build" && (
-                        <motion.div key="build" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.12 }}
-                            className="p-3 space-y-3">
-
-                            {/* Network */}
-                            <div className="flex items-center gap-2 px-2 py-1.5 bg-[#060606] rounded border border-[#1a1a1a]">
-                                <div className="w-[6px] h-[6px] rounded-full bg-[#22C55E] shadow-[0_0_4px_#22C55E]" />
-                                <span className="text-[10px] text-[#808080] font-medium">Stellar Testnet</span>
-                                <span className="ml-auto text-[9px] text-[#333] font-mono">0x5448D640</span>
-                            </div>
-
-                            {/* Pipeline */}
-                            <div className="p-3 bg-[#060606] rounded border border-[#1a1a1a] space-y-2">
-                                <div className="text-[9px] text-[#444] uppercase tracking-[0.15em] font-semibold mb-2">Pipeline</div>
-                                <PipelineStep label="Compile" status={getStepStatus("compile")} step={1} />
-                                <div className="ml-[9px] w-[2px] h-2 bg-[#1a1a1a]" />
-                                <PipelineStep label="Verify" status={getStepStatus("verify")} step={2} />
-                                <div className="ml-[9px] w-[2px] h-2 bg-[#1a1a1a]" />
-                                <PipelineStep label="Deploy" status={getStepStatus("deploy")} step={3} />
-                            </div>
-
-                            {/* Action Buttons */}
-                            <div className="space-y-1.5">
-                                <motion.button onClick={() => compile()}
-                                    disabled={buildStatus === "compiling"}
-                                    className="w-full h-8 text-[11px] font-semibold rounded bg-[#22C55E] text-black disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-1.5 relative overflow-hidden"
-                                    whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.99 }}>
-                                    {buildStatus === "compiling" && (
-                                        <motion.div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent"
-                                            animate={{ x: ["-100%", "100%"] }}
-                                            transition={{ repeat: Infinity, duration: 1.2, ease: "linear" }} />
-                                    )}
-                                    <span className="relative">{buildStatus === "compiling" ? "Compiling..." : "Compile"}</span>
-                                </motion.button>
-
-                                <motion.button onClick={() => verify()}
-                                    disabled={buildStatus === "verifying" || !compileResult?.hash}
-                                    className="w-full h-8 text-[11px] font-semibold rounded bg-[#9B7FFF] text-black disabled:opacity-25 disabled:cursor-not-allowed flex items-center justify-center gap-1.5"
-                                    whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.99 }}>
-                                    {buildStatus === "verifying" ? "Verifying..." : "Verify"}
-                                </motion.button>
-
-                                <motion.button onClick={() => deploy()}
-                                    disabled={buildStatus === "deploying" || !compileResult?.wasm}
-                                    className="w-full h-8 text-[11px] font-semibold rounded bg-[#3B82F6] text-white disabled:opacity-25 disabled:cursor-not-allowed flex items-center justify-center gap-1.5"
-                                    whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.99 }}>
-                                    {buildStatus === "deploying" ? "Deploying..." : "Deploy to Testnet"}
-                                </motion.button>
-                            </div>
-
-                            {/* Compile Output */}
-                            {compileResult?.success && (
-                                <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }}
-                                    className="p-2.5 bg-[#060606] rounded border border-[#22C55E]/15 space-y-1.5">
-                                    <div className="text-[9px] text-[#444] uppercase tracking-[0.15em] font-semibold">Artifact</div>
-                                    <div className="flex justify-between text-[11px]">
-                                        <span className="text-[#666]">WASM</span>
-                                        <span className="text-white font-mono text-[10px]">{compileResult.size} B</span>
-                                    </div>
-                                    <div className="flex justify-between text-[11px] items-center">
-                                        <span className="text-[#666]">Hash</span>
-                                        <span className="text-[#FFC800] font-mono text-[9px]">{compileResult.hash?.slice(0, 20)}...</span>
-                                    </div>
-                                    {compileResult.abi && (
-                                        <div className="flex justify-between text-[11px]">
-                                            <span className="text-[#666]">ABI</span>
-                                            <span className="text-[#22C55E] text-[10px]">Ready</span>
-                                        </div>
-                                    )}
-                                </motion.div>
-                            )}
-
-                            {/* Verify Result */}
-                            {verifyResult && (
-                                <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }}
-                                    className={`p-2.5 bg-[#060606] rounded border space-y-1 ${verifyResult.verified ? "border-[#22C55E]/15" : "border-[#EF4444]/15"}`}>
-                                    <div className="text-[9px] text-[#444] uppercase tracking-[0.15em] font-semibold">Verification</div>
-                                    <div className="flex justify-between text-[11px]">
-                                        <span className="text-[#666]">Deterministic</span>
-                                        <span className={verifyResult.hashMatch ? "text-[#22C55E]" : "text-[#EF4444]"}>
-                                            {verifyResult.hashMatch ? "PASS" : "FAIL"}
-                                        </span>
-                                    </div>
-                                    {verifyResult.onChainMatch !== undefined && (
-                                        <div className="flex justify-between text-[11px]">
-                                            <span className="text-[#666]">On-chain</span>
-                                            <span className={verifyResult.onChainMatch ? "text-[#22C55E]" : "text-[#EF4444]"}>
-                                                {verifyResult.onChainMatch ? "MATCH" : "DIFFER"}
-                                            </span>
-                                        </div>
-                                    )}
-                                </motion.div>
-                            )}
-
-                            {/* Deploy Result */}
-                            {deployResult?.success && (
-                                <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }}
-                                    className="p-2.5 bg-[#060606] rounded border border-[#3B82F6]/15 space-y-2">
-                                    <div className="text-[9px] text-[#444] uppercase tracking-[0.15em] font-semibold">Deployed</div>
-                                    <div className="space-y-1">
-                                        <div className="text-[9px] text-[#555]">Contract ID</div>
-                                        <div className="flex items-center gap-1 bg-[#111] rounded px-2 py-1 border border-[#1a1a1a]">
-                                            <span className="text-[9px] text-[#3B82F6] font-mono truncate flex-1">
-                                                {deployResult.contractId}
-                                            </span>
-                                            <button onClick={() => handleCopy(deployResult.contractId || "")}
-                                                className="text-[#555] hover:text-white transition-colors shrink-0"
-                                                title="Copy">
-                                                {copied ? <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#22C55E" strokeWidth="2"><path d="M5 12l5 5L20 7" /></svg> : <CopyIcon />}
-                                            </button>
-                                        </div>
-                                    </div>
-                                    {deployResult.explorerUrl && (
-                                        <a href={deployResult.explorerUrl} target="_blank" rel="noopener noreferrer"
-                                            className="flex items-center gap-1.5 text-[10px] text-[#3B82F6] hover:text-[#60a5fa] transition-colors">
-                                            <ExternalLinkIcon />
-                                            <span>View on Explorer</span>
-                                        </a>
-                                    )}
-                                </motion.div>
-                            )}
-                        </motion.div>
-                    )}
-                </AnimatePresence>
+            {/* Header */}
+            <div className="relative h-14 flex items-center justify-between px-5 border-b border-[#151515] shrink-0">
+                <div className="absolute bottom-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-[#FFC800]/20 to-transparent" />
+                <div className="flex items-center">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#FFC800" strokeWidth="1.5" className="mr-3 opacity-70">
+                        <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z" />
+                    </svg>
+                    <span className="text-[13px] font-semibold text-[#505050] uppercase tracking-[0.15em]">
+                        Workspace
+                    </span>
+                </div>
+                <div className="flex items-center gap-2">
+                    <motion.button
+                        onClick={() => setCreatingFile("root")}
+                        className="w-8 h-8 flex items-center justify-center rounded-lg text-[#505050] hover:text-[#FFC800] hover:bg-[#FFC800]/10 transition-colors"
+                        whileHover={{ scale: 1.05 }}
+                        whileTap={{ scale: 0.95 }}
+                        title="New file"
+                    >
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                            <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
+                            <path d="M14 2v6h6M12 18v-6M9 15h6" />
+                        </svg>
+                    </motion.button>
+                    <motion.button
+                        onClick={() => setCreatingFolder("root")}
+                        className="w-8 h-8 flex items-center justify-center rounded-lg text-[#505050] hover:text-[#FFC800] hover:bg-[#FFC800]/10 transition-colors"
+                        whileHover={{ scale: 1.05 }}
+                        whileTap={{ scale: 0.95 }}
+                        title="New folder"
+                    >
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                            <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z" />
+                            <path d="M12 11v6M9 14h6" />
+                        </svg>
+                    </motion.button>
+                </div>
             </div>
 
-            {/* ── Context Menu ── */}
+            {/* Content */}
+            <div className="flex-1 overflow-y-auto relative z-10">
+                {/* Files Section */}
+                <div className="border-b border-[#111]">
+                    <div className="px-5 py-3 flex items-center justify-between">
+                        <span className="text-[11px] text-[#404040] uppercase tracking-[0.2em] font-semibold">Files</span>
+                    </div>
+                    <div
+                        className="pb-3"
+                        onContextMenu={(e) => {
+                            if (e.target === e.currentTarget) {
+                                e.preventDefault();
+                                setContextMenu({
+                                    x: e.clientX, y: e.clientY, onClose: () => setContextMenu(null),
+                                    items: [
+                                        { label: "New File", action: () => setCreatingFile("root") },
+                                        { label: "New Folder", action: () => setCreatingFolder("root") },
+                                    ]
+                                });
+                            }
+                        }}
+                    >
+                        <RenderFolder folder={project.root} depth={0} />
+                    </div>
+                </div>
+
+                {/* Build Section */}
+                {(activeView === "explorer" || activeView === "git") && (
+                    <div className="p-5 space-y-4">
+                        {/* Build Header */}
+                        <motion.button
+                            onClick={() => setBuildExpanded(!buildExpanded)}
+                            className="flex items-center gap-2 w-full text-left"
+                        >
+                            <ChevronIcon open={buildExpanded} />
+                            <span className="text-[11px] text-[#404040] uppercase tracking-[0.2em] font-semibold">Build & Deploy</span>
+                        </motion.button>
+
+                        <AnimatePresence>
+                            {buildExpanded && (
+                                <motion.div
+                                    initial={{ height: 0, opacity: 0 }}
+                                    animate={{ height: "auto", opacity: 1 }}
+                                    exit={{ height: 0, opacity: 0 }}
+                                    transition={{ duration: 0.2 }}
+                                    className="space-y-4 overflow-hidden"
+                                >
+                                    {/* Network indicator */}
+                                    <div className="flex items-center gap-3 px-4 py-3 bg-[#080808] rounded-xl border border-[#1a1a1a]">
+                                        <div className="w-2.5 h-2.5 rounded-full bg-[#22C55E] shadow-[0_0_6px_#22C55E]" />
+                                        <span className="text-[13px] text-[#707070] font-medium">Stellar Testnet</span>
+                                    </div>
+
+                                    {/* Pipeline */}
+                                    <div className="p-4 bg-[#080808] rounded-xl border border-[#1a1a1a] space-y-3">
+                                        <PipelineStep label="Compile" status={getStepStatus("compile")} step={1} />
+                                        <div className="ml-3 w-[2px] h-3 bg-[#1a1a1a]" />
+                                        <PipelineStep label="Verify" status={getStepStatus("verify")} step={2} />
+                                        <div className="ml-3 w-[2px] h-3 bg-[#1a1a1a]" />
+                                        <PipelineStep label="Deploy" status={getStepStatus("deploy")} step={3} />
+                                    </div>
+
+                                    {/* Action Buttons */}
+                                    <div className="space-y-2">
+                                        <motion.button
+                                            onClick={() => compile()}
+                                            disabled={buildStatus === "compiling"}
+                                            className="w-full h-12 text-[14px] font-bold rounded-xl bg-[#22C55E] text-black disabled:opacity-40 disabled:cursor-not-allowed"
+                                            whileHover={{ scale: 1.01 }}
+                                            whileTap={{ scale: 0.99 }}
+                                        >
+                                            {buildStatus === "compiling" ? "Compiling..." : "Compile"}
+                                        </motion.button>
+
+                                        <motion.button
+                                            onClick={() => verify()}
+                                            disabled={buildStatus === "verifying" || !compileResult?.hash}
+                                            className="w-full h-12 text-[14px] font-bold rounded-xl bg-[#9B7FFF] text-black disabled:opacity-25 disabled:cursor-not-allowed"
+                                            whileHover={{ scale: 1.01 }}
+                                            whileTap={{ scale: 0.99 }}
+                                        >
+                                            {buildStatus === "verifying" ? "Verifying..." : "Verify"}
+                                        </motion.button>
+
+                                        <motion.button
+                                            onClick={() => deploy()}
+                                            disabled={buildStatus === "deploying" || !compileResult?.wasm}
+                                            className="w-full h-12 text-[14px] font-bold rounded-xl bg-[#3B82F6] text-white disabled:opacity-25 disabled:cursor-not-allowed"
+                                            whileHover={{ scale: 1.01 }}
+                                            whileTap={{ scale: 0.99 }}
+                                        >
+                                            {buildStatus === "deploying" ? "Deploying..." : "Deploy"}
+                                        </motion.button>
+                                    </div>
+
+                                    {/* Compile Output */}
+                                    {compileResult?.success && (
+                                        <motion.div
+                                            initial={{ opacity: 0, y: 4 }}
+                                            animate={{ opacity: 1, y: 0 }}
+                                            className="p-4 bg-[#080808] rounded-xl border border-[#22C55E]/20 space-y-2"
+                                        >
+                                            <div className="text-[11px] text-[#404040] uppercase tracking-wider font-semibold">Artifact</div>
+                                            <div className="flex justify-between text-[13px]">
+                                                <span className="text-[#606060]">WASM</span>
+                                                <span className="text-white font-mono">{compileResult.size} B</span>
+                                            </div>
+                                            <div className="flex justify-between text-[13px] items-center">
+                                                <span className="text-[#606060]">Hash</span>
+                                                <span className="text-[#FFC800] font-mono text-[11px]">{compileResult.hash?.slice(0, 16)}...</span>
+                                            </div>
+                                        </motion.div>
+                                    )}
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
+                    </div>
+                )}
+            </div>
+
+            {/* Context Menu */}
             <AnimatePresence>
                 {contextMenu && <ContextMenu {...contextMenu} />}
             </AnimatePresence>
-        </div>
+        </motion.div>
     );
 }

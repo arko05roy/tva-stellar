@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import Editor, { useMonaco } from "@monaco-editor/react";
+import Editor from "@monaco-editor/react";
 import { motion } from "framer-motion";
 import { useProject } from "./useProjectState";
 
@@ -21,9 +21,7 @@ const StellarIcon = () => (
 
 export default function CodeEditor() {
     const { activeFile, updateFileContent } = useProject();
-    const monaco = useMonaco();
-
-    React.useEffect(() => {
+    const handleEditorWillMount = (monaco: any) => {
         if (monaco) {
             // Register Solidity language
             monaco.languages.register({ id: 'solidity' });
@@ -431,7 +429,7 @@ export default function CodeEditor() {
                 }
             });
         }
-    }, [monaco]);
+    };
 
     if (!activeFile) {
         return (
@@ -562,6 +560,7 @@ export default function CodeEditor() {
             {/* Editor */}
             <div className="flex-1 relative">
                 <Editor
+                    beforeMount={handleEditorWillMount}
                     height="100%"
                     defaultLanguage="solidity"
                     language={getLanguageFromFile(activeFile.name, activeFile.type)}
