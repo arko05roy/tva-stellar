@@ -1,0 +1,9 @@
+{
+  "contractName": "SimpleStorage",
+  "contractId": "CCURWJZXOIRYCTFD3WH4Y4YN7RSDLS7PMXAKGGKNYOD3UJZ6KH7COXNK",
+  "evmAddress": "0xa91b27377223814ca3dd8fcc730dfc6435cbef65",
+  "wasmPath": "/home/agnij/Desktop/TVA-Protocol/artifacts/SimpleStorage.wasm",
+  "deployedAt": "2026-01-24T22:07:22.326Z",
+  "network": "testnet",
+  "chainId": 1414676736
+}

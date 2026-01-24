@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { execSync } from 'child_process';
+import { execSync, spawn } from 'child_process';
 import { writeFileSync, readFileSync, mkdtempSync, rmSync, existsSync, readdirSync } from 'fs';
 import { join, resolve } from 'path';
 import { tmpdir } from 'os';
@@ -39,24 +39,33 @@ function getMsgSenderShimPath(projectRoot: string): string {
   return resolve(projectRoot, 'tooling/msg-sender-shim/target/release/msg-sender-shim');
 }
 
-function parseCompilerOutput(stderr: string): { errors: string[]; warnings: string[] } {
+function parseCompilerOutput(output: string): { errors: string[]; warnings: string[] } {
   const errors: string[] = [];
   const warnings: string[] = [];
 
-  const lines = stderr.split('\n').filter((line) => line.trim().length > 0);
+  if (!output || output.trim().length === 0) {
+    return { errors, warnings };
+  }
+
+  const lines = output.split('\n').filter((line) => line.trim().length > 0);
 
   let currentMessage = '';
   let currentType: 'error' | 'warning' | null = null;
 
   for (const line of lines) {
-    if (line.includes('error:') || line.includes('error[')) {
+    const lowerLine = line.toLowerCase();
+    
+    // Check for error indicators
+    if (lowerLine.includes('error:') || lowerLine.includes('error[') || 
+        lowerLine.includes('fatal:') || lowerLine.includes('failed') ||
+        (lowerLine.includes('error') && (lowerLine.includes('at') || lowerLine.includes('line')))) {
       if (currentMessage && currentType) {
         if (currentType === 'error') errors.push(currentMessage.trim());
         else warnings.push(currentMessage.trim());
       }
       currentMessage = line;
       currentType = 'error';
-    } else if (line.includes('warning:') || line.includes('warning[')) {
+    } else if (lowerLine.includes('warning:') || lowerLine.includes('warning[')) {
       if (currentMessage && currentType) {
         if (currentType === 'error') errors.push(currentMessage.trim());
         else warnings.push(currentMessage.trim());
@@ -64,7 +73,15 @@ function parseCompilerOutput(stderr: string): { errors: string[]; warnings: stri
       currentMessage = line;
       currentType = 'warning';
     } else if (currentType) {
+      // Continue building the current message
       currentMessage += '\n' + line;
+      // Stop if we hit an empty line or a new error/warning starts
+      if (line.trim().length === 0 && currentMessage.trim().length > 0) {
+        if (currentType === 'error') errors.push(currentMessage.trim());
+        else warnings.push(currentMessage.trim());
+        currentMessage = '';
+        currentType = null;
+      }
     }
   }
 
@@ -167,26 +184,62 @@ export async function POST(request: NextRequest): Promise<NextResponse<CompileRe
     // Write the (possibly preprocessed) source to the temp file
     writeFileSync(sourceFilePath, processedSource, 'utf-8');
 
-    // Run solang compiler with --target soroban
-    const compileCommand = `"${solangPath}" compile "${sourceFilePath}" --target soroban -o "${outputDir}"`;
-
+    // Run solang compiler with --target soroban using spawn to properly capture output
+    const compileArgs = ['compile', sourceFilePath, '--target', 'soroban', '-o', outputDir];
+    
+    let compileStdout = '';
     let compileStderr = '';
+    let compileExitCode = 0;
     const warnings: string[] = [];
 
     try {
-      execSync(compileCommand, {
-        encoding: 'utf-8',
-        timeout: 60000,
+      // Use spawn to properly capture both stdout and stderr
+      const compileProcess = spawn(solangPath, compileArgs, {
         cwd: tempDir,
         stdio: ['pipe', 'pipe', 'pipe'],
       });
+
+      compileProcess.stdout.on('data', (data) => {
+        compileStdout += data.toString();
+      });
+
+      compileProcess.stderr.on('data', (data) => {
+        compileStderr += data.toString();
+      });
+
+      // Wait for process to complete
+      await new Promise<void>((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          compileProcess.kill();
+          reject(new Error('Compilation timeout'));
+        }, 60000);
+
+        compileProcess.on('close', (code) => {
+          clearTimeout(timeout);
+          compileExitCode = code ?? 1;
+          resolve();
+        });
+
+        compileProcess.on('error', (error) => {
+          clearTimeout(timeout);
+          reject(error);
+        });
+      });
     } catch (compileError: unknown) {
-      const err = compileError as { stderr?: string; stdout?: string; status?: number };
-      compileStderr = err.stderr || '';
+      const err = compileError as { message?: string };
+      // If spawn failed, try to get error message
+      if (!compileStderr && err.message) {
+        compileStderr = err.message;
+      }
+    }
 
-      const parsed = parseCompilerOutput(compileStderr);
+    // Combine stdout and stderr for error parsing (Solang may output errors to either)
+    const combinedOutput = compileStderr + '\n' + compileStdout;
+    const parsed = parseCompilerOutput(combinedOutput);
 
-      // If there are actual errors (not just warnings), return failure
+    // If compilation failed (non-zero exit code) or there are errors, return failure
+    if (compileExitCode !== 0 || parsed.errors.length > 0) {
+      // If we have parsed errors, return them
       if (parsed.errors.length > 0) {
         return NextResponse.json(
           {
@@ -197,17 +250,60 @@ export async function POST(request: NextRequest): Promise<NextResponse<CompileRe
           { status: 422 }
         );
       }
-
-      // If only warnings, continue
-      warnings.push(...parsed.warnings);
-    }
-
-    // Look for the compiled WASM output
-    if (!existsSync(outputDir)) {
+      
+      // If no parsed errors but compilation failed, try to extract error from output
+      if (combinedOutput.trim()) {
+        // Try to find error messages in the output
+        const errorLines = combinedOutput.split('\n').filter(line => 
+          line.toLowerCase().includes('error') || 
+          line.toLowerCase().includes('failed') ||
+          line.trim().length > 0
+        );
+        
+        if (errorLines.length > 0) {
+          return NextResponse.json(
+            {
+              success: false,
+              errors: errorLines.slice(0, 5), // Limit to first 5 error lines
+              warnings: parsed.warnings.length > 0 ? parsed.warnings : undefined,
+            },
+            { status: 422 }
+          );
+        }
+      }
+      
+      // Fallback error message
       return NextResponse.json(
         {
           success: false,
-          errors: ['Compilation produced no output directory'],
+          errors: ['Compilation failed with no error details'],
+          warnings: parsed.warnings.length > 0 ? parsed.warnings : undefined,
+        },
+        { status: 422 }
+      );
+    }
+
+    // If only warnings, continue
+    warnings.push(...parsed.warnings);
+
+    // Look for the compiled WASM output
+    if (!existsSync(outputDir)) {
+      // If we have compilation output, include it in the error
+      const errorMessages = ['Compilation produced no output directory'];
+      if (combinedOutput.trim()) {
+        // Include relevant error lines from the output
+        const relevantLines = combinedOutput.split('\n')
+          .filter(line => line.trim().length > 0)
+          .slice(0, 3); // Include first 3 non-empty lines
+        if (relevantLines.length > 0) {
+          errorMessages.push('Compiler output:', ...relevantLines);
+        }
+      }
+      
+      return NextResponse.json(
+        {
+          success: false,
+          errors: errorMessages,
           warnings: warnings.length > 0 ? warnings : undefined,
         },
         { status: 422 }

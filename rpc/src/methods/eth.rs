@@ -86,10 +86,11 @@ pub async fn get_block_by_hash(
     Ok(format_block_response(&block, &txs, include_txs))
 }
 
-/// Handler for eth_call (read-only contract invocation) - still simulates on Stellar
+/// Handler for eth_call (read-only contract invocation) - translates to Soroban simulation
 pub async fn call(
     client: &SorobanClient,
     config: &Config,
+    db: &ChainDb,
     abi_registry: &AbiRegistry,
     params: &[Value],
 ) -> Result<Value> {
@@ -125,7 +126,9 @@ pub async fn call(
 
     let source_account = get_source_account_id(config)?;
     let sequence = client.get_account_sequence(&source_account).await.unwrap_or(0);
-    let contract_id = evm_address_to_contract_id(to);
+
+    // Look up the actual Stellar contract ID from the registry
+    let contract_id = resolve_contract_id(db, to)?;
 
     let tx_xdr = crate::translator::tx::build_soroban_invoke_tx(
         &source_account,

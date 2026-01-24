@@ -218,14 +218,14 @@ pragma solidity ^0.8.0;
 // Soroban-compatible ERC721 NFT
 // Simplified implementation for Soroban compatibility.
 contract NFT {
-    string public name;
-    string public symbol;
-    address public owner;
-    uint128 public totalMinted;
-    uint128 public nextTokenId;
+    string public instance name;
+    string public instance symbol;
+    address public instance owner;
+    uint128 public persistent totalMinted;
+    uint128 public persistent nextTokenId;
 
     // Track ownership count per address (simplified)
-    uint128 public ownerTokenCount;
+    uint128 public persistent ownerTokenCount;
 
     constructor(string memory _name, string memory _symbol) {
         name = _name;
@@ -419,12 +419,12 @@ pragma solidity ^0.8.0;
 /// @notice OpenZeppelin-style ERC20 adapted for Soroban
 /// @dev No mappings, no indexed events, explicit storage only
 contract MyToken {
-    string public name;
-    string public symbol;
-    uint8 public decimals;
-    uint128 public totalSupply;
-    address public owner;
-    uint128 public ownerBalance;
+    string public instance name;
+    string public instance symbol;
+    uint8 public instance decimals;
+    uint128 public persistent totalSupply;
+    address public instance owner;
+    uint128 public persistent ownerBalance;
 
     constructor(string memory _name, string memory _symbol, uint128 _initialSupply) {
         name = _name;
@@ -477,13 +477,13 @@ pragma solidity ^0.8.0;
 /// @notice Fungible token with burn and burnFrom functionality
 /// @dev No mappings, no indexed events, explicit storage only
 contract BurnableToken {
-    string public name;
-    string public symbol;
-    uint8 public decimals;
-    uint128 public totalSupply;
-    address public owner;
-    uint128 public ownerBalance;
-    uint128 public totalBurned;
+    string public instance name;
+    string public instance symbol;
+    uint8 public instance decimals;
+    uint128 public persistent totalSupply;
+    address public instance owner;
+    uint128 public persistent ownerBalance;
+    uint128 public persistent totalBurned;
 
     constructor(string memory _name, string memory _symbol, uint128 _initialSupply) {
         name = _name;
@@ -534,13 +534,13 @@ pragma solidity ^0.8.0;
 /// @notice Fungible token with emergency pause functionality
 /// @dev No mappings, no indexed events, explicit storage only
 contract PausableToken {
-    string public name;
-    string public symbol;
-    uint8 public decimals;
-    uint128 public totalSupply;
-    address public owner;
-    uint128 public ownerBalance;
-    bool public paused;
+    string public instance name;
+    string public instance symbol;
+    uint8 public instance decimals;
+    uint128 public persistent totalSupply;
+    address public instance owner;
+    uint128 public persistent ownerBalance;
+    bool public instance paused;
 
     constructor(string memory _name, string memory _symbol, uint128 _initialSupply) {
         name = _name;
@@ -606,13 +606,13 @@ pragma solidity ^0.8.0;
 /// @notice OpenZeppelin-style NFT adapted for Soroban
 /// @dev No mappings, no indexed events, explicit storage only
 contract MyNFT {
-    string public name;
-    string public symbol;
-    address public owner;
-    uint128 public totalSupply;
-    uint128 public nextTokenId;
-    uint128 public ownerBalance;
-    string public baseURI;
+    string public instance name;
+    string public instance symbol;
+    address public instance owner;
+    uint128 public persistent totalSupply;
+    uint128 public persistent nextTokenId;
+    uint128 public persistent ownerBalance;
+    string private instance baseURI;
 
     constructor(string memory _name, string memory _symbol) {
         name = _name;
@@ -621,7 +621,6 @@ contract MyNFT {
         totalSupply = 0;
         nextTokenId = 1;
         ownerBalance = 0;
-        baseURI = "";
     }
 
     function setBaseURI(string memory _baseURI) public {
@@ -645,10 +644,6 @@ contract MyNFT {
     function balanceOf() public view returns (uint128) {
         return ownerBalance;
     }
-
-    function getBaseURI() public view returns (string memory) {
-        return baseURI;
-    }
 }
 `
     },
@@ -664,13 +659,13 @@ pragma solidity ^0.8.0;
 /// @notice NFT with burn functionality
 /// @dev No mappings, no indexed events, explicit storage only
 contract BurnableNFT {
-    string public name;
-    string public symbol;
-    address public owner;
-    uint128 public totalSupply;
-    uint128 public nextTokenId;
-    uint128 public ownerBalance;
-    uint128 public burnedCount;
+    string public instance name;
+    string public instance symbol;
+    address public instance owner;
+    uint128 public persistent totalSupply;
+    uint128 public persistent nextTokenId;
+    uint128 public persistent ownerBalance;
+    uint128 public persistent burnedCount;
 
     constructor(string memory _name, string memory _symbol) {
         name = _name;
@@ -724,19 +719,19 @@ pragma solidity ^0.8.0;
 /// @notice NFT with token enumeration support
 /// @dev No mappings, explicit token slots for enumeration
 contract EnumerableNFT {
-    string public name;
-    string public symbol;
-    address public owner;
-    uint128 public totalSupply;
-    uint128 public nextTokenId;
-    uint128 public ownerBalance;
+    string public instance name;
+    string public instance symbol;
+    address public instance owner;
+    uint128 public persistent totalSupply;
+    uint128 public persistent nextTokenId;
+    uint128 public persistent ownerBalance;
 
     // Explicit token slots (max 5 tokens for demo)
-    uint128 public token0;
-    uint128 public token1;
-    uint128 public token2;
-    uint128 public token3;
-    uint128 public token4;
+    uint128 public persistent token0;
+    uint128 public persistent token1;
+    uint128 public persistent token2;
+    uint128 public persistent token3;
+    uint128 public persistent token4;
 
     constructor(string memory _name, string memory _symbol) {
         name = _name;
@@ -803,16 +798,16 @@ pragma solidity ^0.8.0;
 /// @notice Multi-token standard with multiple token types
 /// @dev No mappings, explicit balance slots for each token ID
 contract MyMultiToken {
-    string public name;
-    string public uri;
-    address public owner;
+    string public instance name;
+    string public instance uri;
+    address public instance owner;
 
     // Explicit balance slots for token IDs 0-4
-    uint128 public balance0;
-    uint128 public balance1;
-    uint128 public balance2;
-    uint128 public balance3;
-    uint128 public balance4;
+    uint128 public persistent balance0;
+    uint128 public persistent balance1;
+    uint128 public persistent balance2;
+    uint128 public persistent balance3;
+    uint128 public persistent balance4;
 
     constructor(string memory _uri) {
         name = "MyMultiToken";
@@ -878,18 +873,18 @@ pragma solidity ^0.8.0;
 /// @notice Multi-token with per-token and total supply tracking
 /// @dev No mappings, explicit slots for balances and supplies
 contract SupplyToken {
-    string public name;
-    string public uri;
-    address public owner;
+    string public instance name;
+    string public instance uri;
+    address public instance owner;
 
     // Balances and supplies for token IDs 0-2
-    uint128 public balance0;
-    uint128 public balance1;
-    uint128 public balance2;
-    uint128 public supply0;
-    uint128 public supply1;
-    uint128 public supply2;
-    uint128 public totalSupplyAll;
+    uint128 public persistent balance0;
+    uint128 public persistent balance1;
+    uint128 public persistent balance2;
+    uint128 public persistent supply0;
+    uint128 public persistent supply1;
+    uint128 public persistent supply2;
+    uint128 public persistent totalSupplyAll;
 
     constructor(string memory _uri) {
         name = "SupplyToken";
@@ -965,9 +960,9 @@ pragma solidity ^0.8.0;
 /// @notice Basic ownership management with two-step transfer
 /// @dev No require statements, uses if/return pattern
 contract OwnableContract {
-    address public owner;
-    address public pendingOwner;
-    bool public hasPendingOwner;
+    address public instance owner;
+    address public instance pendingOwner;
+    bool public instance hasPendingOwner;
 
     constructor() {
         owner = msg.sender;
@@ -1024,11 +1019,11 @@ pragma solidity ^0.8.0;
 /// @notice Role-based permissions with admin, minter, pauser roles
 /// @dev No mappings, explicit role tracking
 contract AccessControlled {
-    address public admin;
-    address public minter;
-    address public pauser;
-    bool public minterSet;
-    bool public pauserSet;
+    address public instance admin;
+    address public instance minter;
+    address public instance pauser;
+    bool public instance minterSet;
+    bool public instance pauserSet;
 
     constructor() {
         admin = msg.sender;
@@ -1096,9 +1091,9 @@ pragma solidity ^0.8.0;
 /// @notice Emergency pause mechanism for contract operations
 /// @dev No require statements, uses if/return pattern
 contract PausableContract {
-    address public owner;
-    bool public paused;
-    uint128 public value;
+    address public instance owner;
+    bool public instance paused;
+    uint128 public persistent value;
 
     constructor() {
         owner = msg.sender;
@@ -1155,9 +1150,9 @@ pragma solidity ^0.8.0;
 /// @notice Prevents reentrant calls to protected functions
 /// @dev Uses lock flag pattern instead of modifier
 contract SecureContract {
-    address public owner;
-    uint128 public balance;
-    bool public locked;
+    address public instance owner;
+    uint128 public persistent balance;
+    bool public instance locked;
 
     constructor() {
         owner = msg.sender;
@@ -1208,13 +1203,13 @@ pragma solidity ^0.8.0;
 /// @notice Fungible token with maximum supply cap
 /// @dev No mappings, explicit storage, cap enforcement
 contract CappedToken {
-    string public name;
-    string public symbol;
-    uint8 public decimals;
-    uint128 public totalSupply;
-    uint128 public cap;
-    address public owner;
-    uint128 public ownerBalance;
+    string public instance name;
+    string public instance symbol;
+    uint8 public instance decimals;
+    uint128 public persistent totalSupply;
+    uint128 public instance cap;
+    address public instance owner;
+    uint128 public persistent ownerBalance;
 
     constructor(string memory _name, string memory _symbol, uint128 _cap) {
         name = _name;
@@ -1271,19 +1266,19 @@ pragma solidity ^0.8.0;
 /// @notice NFT with individual token URI storage
 /// @dev Explicit URI slots for first 5 tokens
 contract URIStorageNFT {
-    string public name;
-    string public symbol;
-    address public owner;
-    uint128 public totalSupply;
-    uint128 public nextTokenId;
-    uint128 public ownerBalance;
+    string public instance name;
+    string public instance symbol;
+    address public instance owner;
+    uint128 public persistent totalSupply;
+    uint128 public persistent nextTokenId;
+    uint128 public persistent ownerBalance;
 
     // Per-token URIs (slots for tokens 1-5)
-    string public uri1;
-    string public uri2;
-    string public uri3;
-    string public uri4;
-    string public uri5;
+    string public instance uri1;
+    string public instance uri2;
+    string public instance uri3;
+    string public instance uri4;
+    string public instance uri5;
 
     constructor(string memory _name, string memory _symbol) {
         name = _name;
@@ -1347,12 +1342,12 @@ pragma solidity ^0.8.0;
 /// @notice Time-delayed value changes for governance
 /// @dev Uses block timestamp for delays
 contract Timelock {
-    address public owner;
-    uint128 public delay;
-    uint128 public pendingValue;
-    uint128 public currentValue;
-    uint128 public unlockTime;
-    bool public hasPending;
+    address public instance owner;
+    uint128 public instance delay;
+    uint128 public persistent pendingValue;
+    uint128 public persistent currentValue;
+    uint128 public persistent unlockTime;
+    bool public instance hasPending;
 
     constructor(uint128 _delay) {
         owner = msg.sender;
@@ -1363,23 +1358,23 @@ contract Timelock {
         hasPending = false;
     }
 
-    function queueValue(uint128 _value) public {
+    function queueValue(uint128 _value, uint128 currentTime) public {
         if (msg.sender != owner) {
             return;
         }
         pendingValue = _value;
-        unlockTime = uint128(block.timestamp) + delay;
+        unlockTime = currentTime + delay;
         hasPending = true;
     }
 
-    function executeValue() public {
+    function executeValue(uint128 currentTime) public {
         if (msg.sender != owner) {
             return;
         }
         if (!hasPending) {
             return;
         }
-        if (block.timestamp < unlockTime) {
+        if (currentTime < unlockTime) {
             return;
         }
         currentValue = pendingValue;
@@ -1398,14 +1393,14 @@ contract Timelock {
         return currentValue;
     }
 
-    function getTimeRemaining() public view returns (uint128) {
+    function getTimeRemaining(uint128 currentTime) public view returns (uint128) {
         if (!hasPending) {
             return 0;
         }
-        if (block.timestamp >= unlockTime) {
+        if (currentTime >= unlockTime) {
             return 0;
         }
-        return unlockTime - uint128(block.timestamp);
+        return unlockTime - currentTime;
     }
 }
 `
@@ -1422,12 +1417,12 @@ pragma solidity ^0.8.0;
 /// @notice Holds funds until conditions are met
 /// @dev Simplified escrow with single beneficiary
 contract Escrow {
-    address public owner;
-    address public beneficiary;
-    uint128 public depositAmount;
-    bool public isDeposited;
-    bool public isReleased;
-    bool public isRefunded;
+    address public instance owner;
+    address public instance beneficiary;
+    uint128 public persistent depositAmount;
+    bool public instance isDeposited;
+    bool public instance isReleased;
+    bool public instance isRefunded;
 
     constructor(address _beneficiary) {
         owner = msg.sender;
@@ -1500,18 +1495,18 @@ pragma solidity ^0.8.0;
 /// @notice Split payments among multiple recipients
 /// @dev Supports up to 3 payees with configurable shares
 contract PaymentSplitter {
-    address public owner;
-    address public payee1;
-    address public payee2;
-    address public payee3;
-    uint128 public shares1;
-    uint128 public shares2;
-    uint128 public shares3;
-    uint128 public totalShares;
-    uint128 public totalReceived;
-    uint128 public released1;
-    uint128 public released2;
-    uint128 public released3;
+    address public instance owner;
+    address public instance payee1;
+    address public instance payee2;
+    address public instance payee3;
+    uint128 public instance shares1;
+    uint128 public instance shares2;
+    uint128 public instance shares3;
+    uint128 public instance totalShares;
+    uint128 public persistent totalReceived;
+    uint128 public persistent released1;
+    uint128 public persistent released2;
+    uint128 public persistent released3;
 
     constructor(
         address _payee1, uint128 _shares1,
@@ -1579,24 +1574,23 @@ pragma solidity ^0.8.0;
 /// @notice Linear token vesting over time
 /// @dev Uses block timestamp for vesting calculation
 contract VestingWallet {
-    address public owner;
-    address public beneficiary;
-    uint128 public start;
-    uint128 public duration;
-    uint128 public totalAmount;
-    uint128 public released;
+    address public instance owner;
+    address public instance beneficiary;
+    uint128 public instance start;
+    uint128 public instance duration;
+    uint128 public instance totalAmount;
+    uint128 public persistent released;
 
-    constructor(address _beneficiary, uint128 _duration, uint128 _amount) {
+    constructor(address _beneficiary, uint128 _startTime, uint128 _duration, uint128 _amount) {
         owner = msg.sender;
         beneficiary = _beneficiary;
-        start = uint128(block.timestamp);
+        start = _startTime;
         duration = _duration;
         totalAmount = _amount;
         released = 0;
     }
 
-    function vestedAmount() public view returns (uint128) {
-        uint128 currentTime = uint128(block.timestamp);
+    function vestedAmount(uint128 currentTime) public view returns (uint128) {
         if (currentTime < start) {
             return 0;
         }
@@ -1607,16 +1601,16 @@ contract VestingWallet {
         return (totalAmount * elapsed) / duration;
     }
 
-    function releasable() public view returns (uint128) {
-        uint128 vested = vestedAmount();
+    function releasable(uint128 currentTime) public view returns (uint128) {
+        uint128 vested = vestedAmount(currentTime);
         if (vested <= released) {
             return 0;
         }
         return vested - released;
     }
 
-    function release() public {
-        uint128 amount = releasable();
+    function release(uint128 currentTime) public {
+        uint128 amount = releasable(currentTime);
         if (amount == 0) {
             return;
         }
@@ -1652,18 +1646,18 @@ pragma solidity ^0.8.0;
 /// @notice Basic proposal and voting system
 /// @dev Supports single active proposal at a time
 contract SimpleGovernor {
-    address public owner;
-    uint128 public proposalCount;
-    uint128 public votingPeriod;
+    address public instance owner;
+    uint128 public persistent proposalCount;
+    uint128 public instance votingPeriod;
 
     // Current proposal
-    uint128 public currentProposalId;
-    string public proposalDescription;
-    uint128 public forVotes;
-    uint128 public againstVotes;
-    uint128 public proposalEnd;
-    bool public proposalActive;
-    bool public proposalExecuted;
+    uint128 public persistent currentProposalId;
+    string public instance proposalDescription;
+    uint128 public persistent forVotes;
+    uint128 public persistent againstVotes;
+    uint128 public persistent proposalEnd;
+    bool public instance proposalActive;
+    bool public instance proposalExecuted;
 
     constructor(uint128 _votingPeriod) {
         owner = msg.sender;
@@ -1678,7 +1672,7 @@ contract SimpleGovernor {
         proposalExecuted = false;
     }
 
-    function propose(string memory description) public returns (uint128) {
+    function propose(string memory description, uint128 currentTime) public returns (uint128) {
         if (msg.sender != owner) {
             return 0;
         }
@@ -1690,40 +1684,40 @@ contract SimpleGovernor {
         proposalDescription = description;
         forVotes = 0;
         againstVotes = 0;
-        proposalEnd = uint128(block.timestamp) + votingPeriod;
+        proposalEnd = currentTime + votingPeriod;
         proposalActive = true;
         proposalExecuted = false;
         return currentProposalId;
     }
 
-    function voteFor(uint128 weight) public {
+    function voteFor(uint128 weight, uint128 currentTime) public {
         if (!proposalActive) {
             return;
         }
-        if (block.timestamp >= proposalEnd) {
+        if (currentTime >= proposalEnd) {
             return;
         }
         forVotes += weight;
     }
 
-    function voteAgainst(uint128 weight) public {
+    function voteAgainst(uint128 weight, uint128 currentTime) public {
         if (!proposalActive) {
             return;
         }
-        if (block.timestamp >= proposalEnd) {
+        if (currentTime >= proposalEnd) {
             return;
         }
         againstVotes += weight;
     }
 
-    function execute() public {
+    function execute(uint128 currentTime) public {
         if (msg.sender != owner) {
             return;
         }
         if (!proposalActive) {
             return;
         }
-        if (block.timestamp < proposalEnd) {
+        if (currentTime < proposalEnd) {
             return;
         }
         if (forVotes <= againstVotes) {
@@ -1733,10 +1727,10 @@ contract SimpleGovernor {
         proposalExecuted = true;
     }
 
-    function getProposalState() public view returns (string memory) {
+    function getProposalState(uint128 currentTime) public view returns (string memory) {
         if (!proposalActive && !proposalExecuted) return "none";
-        if (proposalActive && block.timestamp < proposalEnd) return "active";
-        if (proposalActive && block.timestamp >= proposalEnd) return "ended";
+        if (proposalActive && currentTime < proposalEnd) return "active";
+        if (proposalActive && currentTime >= proposalEnd) return "ended";
         if (proposalExecuted) return "executed";
         return "unknown";
     }
@@ -2050,16 +2044,16 @@ pragma solidity ^0.8.0;
 /// @notice NFT with EIP-2981 royalty support
 /// @dev Default royalty for all tokens
 contract RoyaltyNFT {
-    string public name;
-    string public symbol;
-    address public owner;
-    uint128 public totalSupply;
-    uint128 public nextTokenId;
-    uint128 public ownerBalance;
+    string public instance name;
+    string public instance symbol;
+    address public instance owner;
+    uint128 public persistent totalSupply;
+    uint128 public persistent nextTokenId;
+    uint128 public persistent ownerBalance;
 
     // Royalty info (basis points, e.g., 250 = 2.5%)
-    address public royaltyReceiver;
-    uint128 public royaltyBps;
+    address public instance royaltyReceiver;
+    uint128 public instance royaltyBps;
 
     constructor(string memory _name, string memory _symbol, uint128 _royaltyBps) {
         name = _name;
@@ -2114,17 +2108,17 @@ pragma solidity ^0.8.0;
 /// @notice NFT with delegatable voting power
 /// @dev Each NFT = 1 vote
 contract VotingNFT {
-    string public name;
-    string public symbol;
-    address public owner;
-    uint128 public totalSupply;
-    uint128 public nextTokenId;
-    uint128 public ownerBalance;
+    string public instance name;
+    string public instance symbol;
+    address public instance owner;
+    uint128 public persistent totalSupply;
+    uint128 public persistent nextTokenId;
+    uint128 public persistent ownerBalance;
 
     // Voting
-    address public ownerDelegate;
-    uint128 public ownerVotingPower;
-    bool public hasDelegated;
+    address public instance ownerDelegate;
+    uint128 public persistent ownerVotingPower;
+    bool public instance hasDelegated;
 
     constructor(string memory _name, string memory _symbol) {
         name = _name;
@@ -2188,22 +2182,22 @@ pragma solidity ^0.8.0;
 /// @notice Multi-token with per-token URI storage
 /// @dev Explicit URI slots for token types 0-4
 contract URIMultiToken {
-    string public name;
-    address public owner;
+    string public instance name;
+    address public instance owner;
 
     // Balances
-    uint128 public balance0;
-    uint128 public balance1;
-    uint128 public balance2;
-    uint128 public balance3;
-    uint128 public balance4;
+    uint128 public persistent balance0;
+    uint128 public persistent balance1;
+    uint128 public persistent balance2;
+    uint128 public persistent balance3;
+    uint128 public persistent balance4;
 
     // URIs
-    string public uri0;
-    string public uri1;
-    string public uri2;
-    string public uri3;
-    string public uri4;
+    string public instance uri0;
+    string public instance uri1;
+    string public instance uri2;
+    string public instance uri3;
+    string public instance uri4;
 
     constructor(string memory _name) {
         name = _name;
@@ -2270,16 +2264,16 @@ pragma solidity ^0.8.0;
 /// @notice Tokenized vault for yield strategies
 /// @dev Simplified vault with share/asset conversion
 contract TokenVault {
-    string public name;
-    string public symbol;
-    uint8 public decimals;
-    address public owner;
+    string public instance name;
+    string public instance symbol;
+    uint8 public instance decimals;
+    address public instance owner;
 
     // Vault state
-    uint128 public totalAssets;
-    uint128 public totalShares;
-    uint128 public ownerShares;
-    uint128 public ownerAssets;
+    uint128 public persistent totalAssets;
+    uint128 public persistent totalShares;
+    uint128 public persistent ownerShares;
+    uint128 public persistent ownerAssets;
 
     constructor(string memory _name, string memory _symbol) {
         name = _name;
@@ -2360,8 +2354,8 @@ pragma solidity ^0.8.0;
 /// @notice Ownership with pending acceptance
 /// @dev Prevents accidental ownership transfers
 contract Ownable2Step {
-    address public owner;
-    address public pendingOwner;
+    address public instance owner;
+    address public instance pendingOwner;
 
     constructor() {
         owner = msg.sender;
@@ -2407,19 +2401,19 @@ pragma solidity ^0.8.0;
 /// @notice Role-based access with member enumeration
 /// @dev Tracks up to 3 members per role
 contract EnumerableAccess {
-    address public admin;
+    address public instance admin;
 
     // Admin role members
-    address public adminMember0;
-    address public adminMember1;
-    address public adminMember2;
-    uint128 public adminCount;
+    address public instance adminMember0;
+    address public instance adminMember1;
+    address public instance adminMember2;
+    uint128 public persistent adminCount;
 
     // Minter role members
-    address public minterMember0;
-    address public minterMember1;
-    address public minterMember2;
-    uint128 public minterCount;
+    address public instance minterMember0;
+    address public instance minterMember1;
+    address public instance minterMember2;
+    uint128 public persistent minterCount;
 
     constructor() {
         admin = msg.sender;
@@ -2482,25 +2476,25 @@ pragma solidity ^0.8.0;
 /// @notice Abstract voting weight with checkpoints
 /// @dev Simplified checkpoint system
 contract Votes {
-    address public owner;
+    address public instance owner;
 
     // Current voting state
-    uint128 public totalVotingPower;
-    address public delegate1;
-    address public delegate2;
-    address public delegate3;
-    uint128 public power1;
-    uint128 public power2;
-    uint128 public power3;
+    uint128 public persistent totalVotingPower;
+    address public instance delegate1;
+    address public instance delegate2;
+    address public instance delegate3;
+    uint128 public persistent power1;
+    uint128 public persistent power2;
+    uint128 public persistent power3;
 
     // Checkpoints (simplified - 3 historical values)
-    uint128 public checkpoint1Block;
-    uint128 public checkpoint1Power;
-    uint128 public checkpoint2Block;
-    uint128 public checkpoint2Power;
-    uint128 public checkpoint3Block;
-    uint128 public checkpoint3Power;
-    uint128 public checkpointCount;
+    uint128 public persistent checkpoint1Block;
+    uint128 public persistent checkpoint1Power;
+    uint128 public persistent checkpoint2Block;
+    uint128 public persistent checkpoint2Power;
+    uint128 public persistent checkpoint3Block;
+    uint128 public persistent checkpoint3Power;
+    uint128 public persistent checkpointCount;
 
     constructor() {
         owner = msg.sender;
@@ -2516,18 +2510,18 @@ contract Votes {
         totalVotingPower += power;
     }
 
-    function createCheckpoint() public {
+    function createCheckpoint(uint128 currentBlock) public {
         if (msg.sender != owner) { return; }
         if (checkpointCount >= 3) { return; }
         checkpointCount += 1;
         if (checkpointCount == 1) {
-            checkpoint1Block = uint128(block.number);
+            checkpoint1Block = currentBlock;
             checkpoint1Power = totalVotingPower;
         } else if (checkpointCount == 2) {
-            checkpoint2Block = uint128(block.number);
+            checkpoint2Block = currentBlock;
             checkpoint2Power = totalVotingPower;
         } else if (checkpointCount == 3) {
-            checkpoint3Block = uint128(block.number);
+            checkpoint3Block = currentBlock;
             checkpoint3Power = totalVotingPower;
         }
     }
@@ -2560,20 +2554,20 @@ pragma solidity ^0.8.0;
 /// @notice Async payment withdrawal pattern
 /// @dev Payees withdraw rather than receive
 contract PullPayment {
-    address public owner;
+    address public instance owner;
 
     // Escrow balances for up to 5 payees
-    address public payee0;
-    address public payee1;
-    address public payee2;
-    address public payee3;
-    address public payee4;
-    uint128 public owed0;
-    uint128 public owed1;
-    uint128 public owed2;
-    uint128 public owed3;
-    uint128 public owed4;
-    uint128 public totalOwed;
+    address public instance payee0;
+    address public instance payee1;
+    address public instance payee2;
+    address public instance payee3;
+    address public instance payee4;
+    uint128 public persistent owed0;
+    uint128 public persistent owed1;
+    uint128 public persistent owed2;
+    uint128 public persistent owed3;
+    uint128 public persistent owed4;
+    uint128 public persistent totalOwed;
 
     constructor() {
         owner = msg.sender;
@@ -2629,15 +2623,15 @@ pragma solidity ^0.8.0;
 /// @notice Simple incrementing counters for IDs
 /// @dev Multiple named counters
 contract Counters {
-    address public owner;
+    address public instance owner;
 
     // Multiple counters
-    uint128 public counter1;
-    uint128 public counter2;
-    uint128 public counter3;
-    string public counter1Name;
-    string public counter2Name;
-    string public counter3Name;
+    uint128 public persistent counter1;
+    uint128 public persistent counter2;
+    uint128 public persistent counter3;
+    string public instance counter1Name;
+    string public instance counter2Name;
+    string public instance counter3Name;
 
     constructor() {
         owner = msg.sender;
@@ -2698,14 +2692,14 @@ pragma solidity ^0.8.0;
 /// @notice Batch multiple operations in one call
 /// @dev Simplified multicall with preset operations
 contract Multicall {
-    address public owner;
+    address public instance owner;
 
     // State that can be modified in batch
-    uint128 public value1;
-    uint128 public value2;
-    uint128 public value3;
-    string public message;
-    bool public flag;
+    uint128 public persistent value1;
+    uint128 public persistent value2;
+    uint128 public persistent value3;
+    string public instance message;
+    bool public instance flag;
 
     constructor() {
         owner = msg.sender;
@@ -2784,24 +2778,24 @@ pragma solidity ^0.8.0;
 /// @notice Forward meta-transactions
 /// @dev Simplified forwarder with nonce tracking
 contract MinimalForwarder {
-    address public owner;
+    address public instance owner;
 
     // Nonce tracking for up to 5 addresses
-    address public user0;
-    address public user1;
-    address public user2;
-    address public user3;
-    address public user4;
-    uint128 public nonce0;
-    uint128 public nonce1;
-    uint128 public nonce2;
-    uint128 public nonce3;
-    uint128 public nonce4;
+    address public instance user0;
+    address public instance user1;
+    address public instance user2;
+    address public instance user3;
+    address public instance user4;
+    uint128 public persistent nonce0;
+    uint128 public persistent nonce1;
+    uint128 public persistent nonce2;
+    uint128 public persistent nonce3;
+    uint128 public persistent nonce4;
 
     // Forwarded call tracking
-    uint128 public totalForwarded;
-    uint128 public totalSuccessful;
-    uint128 public totalFailed;
+    uint128 public persistent totalForwarded;
+    uint128 public persistent totalSuccessful;
+    uint128 public persistent totalFailed;
 
     constructor() {
         owner = msg.sender;

@@ -181,11 +181,20 @@ impl ChainDb {
                 created_at INTEGER NOT NULL
             );
 
+            CREATE TABLE IF NOT EXISTS contracts (
+                evm_address TEXT PRIMARY KEY,
+                stellar_contract_id TEXT NOT NULL,
+                contract_name TEXT,
+                abi_json TEXT,
+                created_at INTEGER NOT NULL
+            );
+
             CREATE INDEX IF NOT EXISTS idx_tx_block ON transactions(block_number);
             CREATE INDEX IF NOT EXISTS idx_tx_status ON transactions(status);
             CREATE INDEX IF NOT EXISTS idx_tx_from ON transactions(from_addr);
             CREATE INDEX IF NOT EXISTS idx_block_status ON blocks(status);
             CREATE INDEX IF NOT EXISTS idx_account_stellar ON accounts(stellar_address);
+            CREATE INDEX IF NOT EXISTS idx_contract_stellar ON contracts(stellar_contract_id);
             ",
         )?;
         Ok(())
@@ -617,6 +626,49 @@ impl ChainDb {
             params![funded as i64, normalized],
         )?;
         Ok(())
+    }
+
+    // --- Contract registry operations ---
+
+    pub fn register_contract(
+        &self,
+        evm_address: &str,
+        stellar_contract_id: &str,
+        contract_name: Option<&str>,
+        abi_json: Option<&str>,
+    ) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        let normalized = evm_address.to_lowercase();
+        conn.execute(
+            "INSERT OR REPLACE INTO contracts (evm_address, stellar_contract_id, contract_name, abi_json, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![
+                normalized,
+                stellar_contract_id,
+                contract_name,
+                abi_json,
+                chrono::Utc::now().timestamp() as i64,
+            ],
+        )?;
+        info!(
+            "Registered contract: {} -> {}",
+            &normalized[..10],
+            &stellar_contract_id[..10]
+        );
+        Ok(())
+    }
+
+    pub fn get_contract_id(&self, evm_address: &str) -> Result<Option<String>> {
+        let conn = self.conn.lock().unwrap();
+        let normalized = evm_address.to_lowercase();
+        let result: Option<String> = conn
+            .query_row(
+                "SELECT stellar_contract_id FROM contracts WHERE evm_address = ?1",
+                params![normalized],
+                |row| row.get(0),
+            )
+            .optional()?;
+        Ok(result)
     }
 }
 
