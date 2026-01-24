@@ -110,6 +110,9 @@ export async function POST(request: NextRequest): Promise<NextResponse<DeployRes
     const hasConstructorArgs = body.constructorArgs && typeof body.constructorArgs === 'object'
       && Object.keys(body.constructorArgs).length > 0;
 
+    // Track if _caller is already provided
+    let hasCaller = false;
+
     if (hasConstructorArgs) {
       args.push('--');
       for (const [argName, argValue] of Object.entries(body.constructorArgs!)) {
@@ -117,17 +120,28 @@ export async function POST(request: NextRequest): Promise<NextResponse<DeployRes
         const flag = `--${cleanName}`;
         let value = String(argValue);
 
-        // Replace EVM-format addresses with the source account identity
-        if (value.startsWith('0x') && value.length === 42) {
+        // Track if _caller is provided
+        if (cleanName === '_caller' || cleanName === 'caller') {
+          hasCaller = true;
           value = sourceAccount;
         }
-        // _caller is Solang's msg.sender equivalent — use deployer identity
-        if (cleanName === '_caller' || cleanName === 'caller') {
+
+        // Replace EVM-format addresses with the source account identity
+        if (value.startsWith('0x') && value.length === 42) {
           value = sourceAccount;
         }
 
         args.push(flag, value);
       }
+    }
+
+    // Always add --_caller if not already provided (contracts using msg.sender need it)
+    // We'll add it proactively, and if the contract doesn't need it, the retry logic will handle it
+    if (!hasCaller) {
+      if (!hasConstructorArgs) {
+        args.push('--');
+      }
+      args.push('--_caller', sourceAccount);
     }
 
     // Execute the stellar CLI - with retry logic for missing constructor args
@@ -175,21 +189,34 @@ export async function POST(request: NextRequest): Promise<NextResponse<DeployRes
         stderr = retryClean.stderr;
       } else {
         // Check if the error is about missing constructor arguments
-        const missingArgPattern = /(?:Missing required argument|required arguments were not provided).*?['`"]?--([^'`"\s]+)['`"]?/g;
+        const missingArgPattern = /(?:Missing required argument|required arguments were not provided).*?['`"]?(_caller|--([^'`"\s]+))['`"]?/g;
         const missingArgs: Array<{ name: string; type: string }> = [];
         let argMatch;
         while ((argMatch = missingArgPattern.exec(errorOutput)) !== null) {
-          missingArgs.push({ name: argMatch[1], type: 'string' });
+          // Match can be either _caller directly or --argname
+          const argName = argMatch[1] === '_caller' ? '_caller' : argMatch[2] || argMatch[1].replace(/^--/, '');
+          if (argName && !missingArgs.find(a => a.name === argName)) {
+            // Determine type from error message if available
+            const typeMatch = errorOutput.match(new RegExp(`${argName}.*?of type\\s+(\\w+)`, 'i'));
+            const argType = typeMatch ? typeMatch[1] : 'address';
+            missingArgs.push({ name: argName, type: argType });
+          }
         }
         // Also try clap's explicit format
         const missingArgPattern2 = /the following required arguments were not provided:\s*([\s\S]*?)(?:\n\n|$)/;
         const blockMatch = missingArgPattern2.exec(errorOutput);
         if (blockMatch) {
-          const argLines = blockMatch[1].split('\n').map(l => l.trim()).filter(l => l.startsWith('--'));
+          const argLines = blockMatch[1].split('\n').map(l => l.trim()).filter(l => l.startsWith('--') || l.includes('_caller'));
           for (const line of argLines) {
-            const name = line.replace(/^--/, '').replace(/<.*>/, '').trim();
+            let name = line.replace(/^--/, '').replace(/<.*>/, '').trim();
+            // Handle _caller without -- prefix
+            if (line.includes('_caller') && !name.includes('_caller')) {
+              name = '_caller';
+            }
             if (name && !missingArgs.find(a => a.name === name)) {
-              missingArgs.push({ name, type: 'string' });
+              const typeMatch = errorOutput.match(new RegExp(`${name}.*?of type\\s+(\\w+)`, 'i'));
+              const argType = typeMatch ? typeMatch[1] : 'address';
+              missingArgs.push({ name, type: argType });
             }
           }
         }
@@ -274,3 +301,4 @@ export async function POST(request: NextRequest): Promise<NextResponse<DeployRes
     }
   }
 }
+

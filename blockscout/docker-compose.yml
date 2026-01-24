@@ -124,6 +124,26 @@ services:
     ports:
       - "3001:3000"
 
+  stats:
+    image: ghcr.io/blockscout/stats:latest
+    restart: always
+    container_name: blockscout-stats
+    depends_on:
+      db:
+        condition: service_healthy
+      backend:
+        condition: service_started
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      STATS__DB_URL: postgresql://blockscout:blockscout@db:5432/blockscout
+      STATS__BLOCKSCOUT_DB_URL: postgresql://blockscout:blockscout@db:5432/blockscout
+      STATS__CREATE_DATABASE: "false"
+      STATS__RUN_MIGRATIONS: "true"
+      STATS__SERVER__HTTP__ADDR: 0.0.0.0:8050
+    ports:
+      - "8080:8050"
+
   smart-contract-verifier:
     image: ghcr.io/blockscout/smart-contract-verifier:latest
     restart: always

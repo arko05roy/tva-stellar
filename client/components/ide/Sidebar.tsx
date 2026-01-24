@@ -1123,23 +1123,20 @@ export default function Sidebar() {
                                 <div className="flex items-center justify-between px-1 py-1">
                                     <PipelineStep label="Compile" status={getStepStatus("compile")} step={1} />
                                     <div className="w-3 h-[1px] bg-[#222] mt-[-10px]" />
-                                    <PipelineStep label="Verify" status={getStepStatus("verify")} step={2} />
-                                    <div className="w-3 h-[1px] bg-[#222] mt-[-10px]" />
-                                    <PipelineStep label="Deploy" status={getStepStatus("deploy")} step={3} />
+                                    <PipelineStep label="Deploy" status={getStepStatus("deploy")} step={2} />
                                 </div>
 
                                 <motion.button
                                     onClick={() => {
                                         if (!compileResult?.success) compile();
-                                        else if (!verifyResult?.verified) verify();
                                         else deploy();
                                     }}
-                                    disabled={buildStatus === "compiling" || buildStatus === "verifying" || buildStatus === "deploying"}
+                                    disabled={buildStatus === "compiling" || buildStatus === "deploying"}
                                     className="w-full h-9 text-[11px] font-bold text-black bg-[#FFC800] rounded-md shadow-lg shadow-[#FFC800]/10 hover:shadow-[#FFC800]/20 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                                     whileHover={{ scale: 1.01 }}
                                     whileTap={{ scale: 0.98 }}
                                 >
-                                    {(buildStatus === "compiling" || buildStatus === "verifying" || buildStatus === "deploying") && (
+                                    {(buildStatus === "compiling" || buildStatus === "deploying") && (
                                         <motion.div
                                             className="w-3 h-3 border-2 border-black/30 border-t-black rounded-full"
                                             animate={{ rotate: 360 }}
@@ -1148,10 +1145,8 @@ export default function Sidebar() {
                                     )}
                                     <span>
                                         {buildStatus === "compiling" ? "Compiling..." :
-                                            buildStatus === "verifying" ? "Verifying..." :
-                                                buildStatus === "deploying" ? "Deploying..." :
-                                                    !compileResult?.success ? "Compile" :
-                                                        !verifyResult?.verified ? "Verify" : "Deploy"}
+                                            buildStatus === "deploying" ? "Deploying..." :
+                                                !compileResult?.success ? "Build" : "Deploy"}
                                     </span>
                                 </motion.button>
                             </div>
