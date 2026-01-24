@@ -26,5 +26,6 @@ export const EVM_ADDRESS_PREFIX = "0x";
 export const STELLAR_ACCOUNT_PREFIX = "G";
 export const SOROBAN_CONTRACT_PREFIX = "C";
 
-// RPC URL (can be overridden via env)
-export const DEFAULT_RPC_URL = process.env.NEXT_PUBLIC_TVA_RPC_URL || "http://localhost:8545";
+// RPC URL - use Next.js API proxy to avoid CORS issues
+// The proxy forwards to the Rust RPC server configured via TVA_RPC_URL env var
+export const DEFAULT_RPC_URL = process.env.NEXT_PUBLIC_TVA_RPC_URL || "/api/rpc";

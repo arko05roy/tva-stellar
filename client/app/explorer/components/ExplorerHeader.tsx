@@ -15,6 +15,28 @@ export function ExplorerHeader() {
     if (typeof window === "undefined" || !(window as any).ethereum) return;
     setConnecting(true);
     try {
+      // Add TVA network to MetaMask
+      try {
+        await (window as any).ethereum.request({
+          method: "wallet_addEthereumChain",
+          params: [{
+            chainId: `0x${TVA_CHAIN_ID.toString(16)}`,
+            chainName: "TVA Testnet",
+            nativeCurrency: { name: "XLM", symbol: "XLM", decimals: 18 },
+            rpcUrls: [window.location.origin + "/api/rpc"],
+            blockExplorerUrls: [window.location.origin + "/explorer"],
+          }],
+        });
+      } catch { /* network may already exist */ }
+
+      // Switch to TVA network
+      try {
+        await (window as any).ethereum.request({
+          method: "wallet_switchEthereumChain",
+          params: [{ chainId: `0x${TVA_CHAIN_ID.toString(16)}` }],
+        });
+      } catch { /* user rejected switch */ }
+
       const accounts = await (window as any).ethereum.request({ method: "eth_requestAccounts" });
       if (accounts?.[0]) setWalletAddress(accounts[0]);
     } catch { /* user rejected */ }
