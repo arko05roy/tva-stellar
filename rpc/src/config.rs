@@ -28,6 +28,8 @@ pub struct Config {
     pub verification_registry_contract_id: Option<String>,
     /// Stellar account address (derived from secret key, for convenience)
     pub stellar_account_address: Option<String>,
+    /// Stellar CLI identity name (for contract deployments)
+    pub stellar_identity: String,
 }
 
 impl Config {
@@ -70,6 +72,8 @@ impl Config {
 
         let verification_registry_contract_id = env::var("VERIFICATION_REGISTRY_CONTRACT_ID").ok();
         let stellar_account_address = env::var("STELLAR_ACCOUNT_ADDRESS").ok();
+        let stellar_identity = env::var("STELLAR_IDENTITY")
+            .unwrap_or_else(|_| "tva-deployer".to_string());
 
         Ok(Config {
             stellar_rpc_url,
@@ -84,6 +88,7 @@ impl Config {
             tva_master_seed,
             verification_registry_contract_id,
             stellar_account_address,
+            stellar_identity,
         })
     }
 

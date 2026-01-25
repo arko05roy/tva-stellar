@@ -1,0 +1,9 @@
+{
+  "contractName": "ChainFiller",
+  "contractAddress": "0x71b7907e80f6f0fd30d6aba6f55114b1254d20c7",
+  "stellarContractId": "CDTNDEPIAFC7APCAZG73K4NXSB7IB5XQ7UYNNK5G6VIRJMJFJUQMOGYG",
+  "wasmSize": 4106,
+  "deployedAt": "2026-01-25T00:14:21.081Z",
+  "chainId": 1414676736,
+  "rpcUrl": "http://localhost:8545"
+}

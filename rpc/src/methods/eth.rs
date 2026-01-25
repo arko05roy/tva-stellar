@@ -1386,15 +1386,16 @@ pub async fn deploy_contract(
     }
 
     let contract_name = filename.replace(".sol", "").to_lowercase();
+    let unique_alias = format!("{}-{}", contract_name, chrono::Utc::now().timestamp_millis());
 
     let deploy_result = std::process::Command::new(&stellar_bin)
         .args(&[
             "contract", "deploy",
             "--wasm", wasm_path.to_str().unwrap(),
-            "--source", &config.stellar_secret_key,
+            "--source-account", &config.stellar_identity,
             "--rpc-url", &config.stellar_rpc_url,
             "--network-passphrase", &config.stellar_network_passphrase,
-            "--alias", &contract_name,
+            "--alias", &unique_alias,
         ])
         .output();
 
@@ -1463,9 +1464,20 @@ pub async fn deploy_contract(
 fn preprocess_msg_sender(source: &str) -> String {
     let mut result = source.to_string();
 
+    // Check if msg.sender is used in actual code (not just in comments)
+    // Simple heuristic: look for msg.sender followed by common code patterns
+    let has_msg_sender_in_code = result.lines().any(|line| {
+        let trimmed = line.trim();
+        // Skip comment lines
+        if trimmed.starts_with("//") || trimmed.starts_with("*") || trimmed.starts_with("/*") {
+            return false;
+        }
+        trimmed.contains("msg.sender")
+    });
+
     // Replace msg.sender in constructors with _caller parameter
     // Add address _caller to constructor if msg.sender is used in constructor
-    if result.contains("msg.sender") {
+    if has_msg_sender_in_code {
         // Simple preprocessing: replace msg.sender usage patterns
         // In constructor context, add _caller parameter
         if let Some(constructor_pos) = result.find("constructor(") {
