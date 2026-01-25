@@ -4,12 +4,19 @@
   "type": "module",
   "description": "TVA Protocol test project - Deploy Solidity to Stellar via standard Hardhat workflow",
   "scripts": {
+    "compile": "npx hardhat compile",
     "deploy": "node scripts/deploy.mjs",
+    "deploy:hardhat": "npx hardhat run scripts/deploy-hardhat.js --network tva",
     "deploy:counter": "node scripts/deploy.mjs contracts/Counter.sol",
     "test": "node scripts/test.mjs",
+    "test:hardhat": "npx hardhat test --network tva",
     "full": "npm run deploy && npm run test"
   },
   "dependencies": {
     "ethers": "^6.16.0"
+  },
+  "devDependencies": {
+    "hardhat": "^2.22.0",
+    "@nomicfoundation/hardhat-ethers": "^3.0.0"
   }
 }

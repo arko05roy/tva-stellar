@@ -62,12 +62,21 @@ async function main() {
   // This compiles the Solidity to Soroban WASM and deploys to Stellar
   console.log(`3. Compiling & deploying to Stellar...`);
 
+  // Generate ABI for registration with TVA
+  const abi = JSON.stringify([
+    { type: "function", name: "get", inputs: [], outputs: [{ name: "", type: "uint64" }], stateMutability: "view" },
+    { type: "function", name: "set", inputs: [{ name: "_value", type: "uint64" }], outputs: [], stateMutability: "nonpayable" },
+    { type: "function", name: "increment", inputs: [], outputs: [], stateMutability: "nonpayable" },
+    { type: "function", name: "storedValue", inputs: [], outputs: [{ name: "", type: "uint64" }], stateMutability: "view" },
+    { type: "event", name: "ValueChanged", inputs: [{ name: "oldValue", type: "uint64", indexed: false }, { name: "newValue", type: "uint64", indexed: false }] },
+  ]);
+
   try {
     const result = await provider.send('tva_deployContract', [
       source,     // Solidity source code
       filename,   // Filename (e.g., "SimpleStorage.sol")
       '{}',       // Constructor args (JSON)
-      null,       // ABI (auto-generated)
+      abi,        // ABI for registration
     ]);
 
     console.log(`\n   Deployed successfully!`);
