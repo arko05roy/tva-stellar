@@ -257,7 +257,7 @@ function Hero() {
 
             {/* CTAs */}
             <motion.div variants={fadeUp} className="flex flex-wrap gap-5">
-              <MagneticButton href="/explorer" variant="primary">
+              <MagneticButton href="/playground" variant="primary">
                 Enter the Timeline
               </MagneticButton>
               <MagneticButton href="#how-it-works" variant="secondary">
