@@ -670,6 +670,22 @@ impl ChainDb {
             .optional()?;
         Ok(result)
     }
+
+    /// Get all contracts with their ABI JSON for loading into ABI registry
+    pub fn get_all_contracts_with_abi(&self) -> Result<Vec<(String, String)>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT evm_address, abi_json FROM contracts WHERE abi_json IS NOT NULL AND abi_json != '[]'"
+        )?;
+        let rows = stmt.query_map([], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        })?;
+        let mut contracts = Vec::new();
+        for row in rows {
+            contracts.push(row?);
+        }
+        Ok(contracts)
+    }
 }
 
 /// rusqlite optional helper

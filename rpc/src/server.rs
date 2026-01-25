@@ -70,6 +70,23 @@ pub async fn start_server(config: Config) -> Result<()> {
         info!("Resuming from block #{}", latest);
     }
 
+    // Load existing contract ABIs from database into the registry
+    match db.get_all_contracts_with_abi() {
+        Ok(contracts) => {
+            for (evm_address, abi_json) in contracts {
+                if let Ok(abi_entries) = serde_json::from_str::<Vec<crate::translator::abi::AbiEntry>>(&abi_json) {
+                    if let Err(e) = abi_registry.register_contract(&evm_address, &abi_entries) {
+                        warn!("Failed to load ABI for {}: {}", evm_address, e);
+                    } else {
+                        let func_count = abi_entries.iter().filter(|e| e.entry_type == "function").count();
+                        info!("Loaded ABI with {} functions for {}", func_count, &evm_address[..14]);
+                    }
+                }
+            }
+        }
+        Err(e) => warn!("Failed to load contract ABIs: {}", e),
+    }
+
     // Initialize mempool
     let mempool = Arc::new(Mempool::new(10_000));
 
@@ -357,6 +374,48 @@ fn register_methods(module: &mut RpcModule<Arc<RpcState>>) -> Result<()> {
             .map_err(|e| jsonrpsee_error(&e.to_string()))
     })?;
 
+    // --- debug_* methods (stubs for Blockscout compatibility) ---
+
+    module.register_async_method("debug_traceTransaction", |_params, _ctx, _| async move {
+        // TVA doesn't support transaction tracing - return empty trace
+        Ok::<serde_json::Value, jsonrpsee::types::ErrorObject<'static>>(serde_json::json!({
+            "gas": 21000,
+            "failed": false,
+            "returnValue": "",
+            "structLogs": []
+        }))
+    })?;
+
+    module.register_async_method("debug_traceBlockByNumber", |_params, _ctx, _| async move {
+        // TVA doesn't support block tracing - return empty traces
+        Ok::<serde_json::Value, jsonrpsee::types::ErrorObject<'static>>(serde_json::json!([]))
+    })?;
+
+    module.register_async_method("debug_traceBlockByHash", |_params, _ctx, _| async move {
+        // TVA doesn't support block tracing - return empty traces
+        Ok::<serde_json::Value, jsonrpsee::types::ErrorObject<'static>>(serde_json::json!([]))
+    })?;
+
+    module.register_async_method("trace_block", |_params, _ctx, _| async move {
+        // TVA doesn't support trace_block - return empty array
+        Ok::<serde_json::Value, jsonrpsee::types::ErrorObject<'static>>(serde_json::json!([]))
+    })?;
+
+    module.register_async_method("trace_replayTransaction", |_params, _ctx, _| async move {
+        // TVA doesn't support trace replay - return empty trace
+        Ok::<serde_json::Value, jsonrpsee::types::ErrorObject<'static>>(serde_json::json!({
+            "output": "0x",
+            "stateDiff": null,
+            "trace": [],
+            "vmTrace": null
+        }))
+    })?;
+
+    module.register_async_method("trace_replayBlockTransactions", |_params, _ctx, _| async move {
+        // TVA doesn't support trace replay - return empty array
+        Ok::<serde_json::Value, jsonrpsee::types::ErrorObject<'static>>(serde_json::json!([]))
+    })?;
+
     // --- net_* methods ---
 
     module.register_async_method("net_version", |_params, ctx, _| async move {
@@ -410,7 +469,7 @@ fn register_methods(module: &mut RpcModule<Arc<RpcState>>) -> Result<()> {
 
     module.register_async_method("tva_deployContract", |params, ctx, _| async move {
         let p: Vec<serde_json::Value> = params.parse().unwrap_or_default();
-        eth::deploy_contract(&ctx.chain.db, &ctx.config, &p)
+        eth::deploy_contract(&ctx.chain.db, &ctx.config, &ctx.abi_registry, &p)
             .await
             .map_err(|e| jsonrpsee_error(&e.to_string()))
     })?;

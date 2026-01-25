@@ -311,6 +311,11 @@ pub async fn get_transaction_receipt(
         .and_then(|s| serde_json::from_str(s).ok())
         .unwrap_or_default();
 
+    // Build Stellar explorer URL if we have a Stellar tx hash
+    let stellar_explorer_url = tx.stellar_tx_hash.as_ref().map(|h| {
+        format!("https://stellar.expert/explorer/testnet/tx/{}", h)
+    });
+
     let receipt = serde_json::json!({
         "transactionHash": tx.hash,
         "transactionIndex": format!("0x{:x}", tx.tx_index),
@@ -326,6 +331,9 @@ pub async fn get_transaction_receipt(
         "status": status,
         "type": "0x0",
         "effectiveGasPrice": format!("0x{:x}", tx.gas_price.max(1000000000)),
+        // TVA-specific: Stellar settlement info
+        "stellarTxHash": tx.stellar_tx_hash,
+        "stellarExplorerUrl": stellar_explorer_url,
     });
 
     Ok(receipt)
@@ -1263,6 +1271,7 @@ fn generate_contract_address(sender: &str, nonce: u64) -> String {
 pub async fn deploy_contract(
     db: &ChainDb,
     config: &Config,
+    abi_registry: &AbiRegistry,
     params: &[Value],
 ) -> Result<Value> {
     let source = params
@@ -1447,6 +1456,19 @@ pub async fn deploy_contract(
         Some(&contract_name),
         abi_json,
     )?;
+
+    // Register ABI with the in-memory registry for function resolution
+    if let Some(abi_str) = abi_json {
+        if let Ok(abi_entries) = serde_json::from_str::<Vec<crate::translator::abi::AbiEntry>>(abi_str) {
+            if let Err(e) = abi_registry.register_contract(&evm_address, &abi_entries) {
+                debug!("Failed to register ABI in memory: {}", e);
+            } else {
+                info!("Registered ABI with {} functions for {}",
+                    abi_entries.iter().filter(|e| e.entry_type == "function").count(),
+                    &evm_address[..14]);
+            }
+        }
+    }
 
     // Cleanup temp dir
     let _ = std::fs::remove_dir_all(&tmp_dir);

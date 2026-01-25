@@ -45,11 +45,23 @@ async function main() {
   console.log(`3. Compiling & deploying to Stellar...`);
 
   try {
+    // Simple ABI for ChainFiller contract
+    const abi = [
+      {"type":"function","name":"increment","inputs":[],"outputs":[],"stateMutability":"nonpayable"},
+      {"type":"function","name":"incrementBy","inputs":[{"name":"amount","type":"uint64"}],"outputs":[],"stateMutability":"nonpayable"},
+      {"type":"function","name":"ping","inputs":[{"name":"value","type":"uint64"}],"outputs":[],"stateMutability":"nonpayable"},
+      {"type":"function","name":"reset","inputs":[],"outputs":[],"stateMutability":"nonpayable"},
+      {"type":"function","name":"getCounter","inputs":[],"outputs":[{"name":"","type":"uint64"}],"stateMutability":"view"},
+      {"type":"function","name":"getTotalCalls","inputs":[],"outputs":[{"name":"","type":"uint64"}],"stateMutability":"view"},
+      {"type":"function","name":"counter","inputs":[],"outputs":[{"name":"","type":"uint64"}],"stateMutability":"view"},
+      {"type":"function","name":"totalCalls","inputs":[],"outputs":[{"name":"","type":"uint64"}],"stateMutability":"view"},
+    ];
+
     const result = await provider.send('tva_deployContract', [
       source,
       filename,
       '{}',
-      null,
+      JSON.stringify(abi),
     ]);
 
     console.log(`\n   Deployed!`);
