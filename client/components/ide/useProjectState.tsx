@@ -3511,7 +3511,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
                 } else {
                     addLog({ type: "success", msg: `↳ Transaction successful` });
                     if (result.txHash) {
-                        addLog({ type: "info", msg: `  TX: ${result.txHash.slice(0, 16)}...` });
+                        addLog({ type: "info", msg: `  Explorer: https://stellar.expert/explorer/testnet/tx/${result.txHash}` });
                     }
                 }
                 return result;
