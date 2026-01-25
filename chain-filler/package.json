@@ -8,6 +8,7 @@
     "fill": "node scripts/fill-chain.mjs",
     "fill:continuous": "node scripts/fill-chain.mjs --continuous",
     "transfer": "node scripts/transfers.mjs",
+    "stellar": "node scripts/stellar-info.mjs",
     "all": "npm run deploy && npm run fill"
   },
   "dependencies": {

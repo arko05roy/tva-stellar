@@ -474,6 +474,69 @@ fn register_methods(module: &mut RpcModule<Arc<RpcState>>) -> Result<()> {
             .map_err(|e| jsonrpsee_error(&e.to_string()))
     })?;
 
+    module.register_async_method("tva_getContractInfo", |params, ctx, _| async move {
+        let p: Vec<serde_json::Value> = params.parse().unwrap_or_default();
+        let evm_address = p.first()
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| jsonrpsee_error("Missing evm_address parameter"))?;
+
+        // Look up contract in database
+        let stellar_id = ctx.chain.db.get_contract_id(evm_address)
+            .map_err(|e| jsonrpsee_error(&e.to_string()))?;
+
+        let result = match stellar_id {
+            Some(id) => {
+                serde_json::json!({
+                    "evmAddress": evm_address,
+                    "stellarContractId": id,
+                    "stellarExplorerUrl": format!("https://stellar.expert/explorer/testnet/contract/{}", id),
+                    "network": "stellar-testnet"
+                })
+            }
+            None => {
+                serde_json::json!({
+                    "evmAddress": evm_address,
+                    "stellarContractId": null,
+                    "error": "Contract not found in TVA registry"
+                })
+            }
+        };
+        Ok::<serde_json::Value, jsonrpsee::types::ErrorObject<'static>>(result)
+    })?;
+
+    module.register_async_method("tva_getTransactionInfo", |params, ctx, _| async move {
+        let p: Vec<serde_json::Value> = params.parse().unwrap_or_default();
+        let tx_hash = p.first()
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| jsonrpsee_error("Missing tx_hash parameter"))?;
+
+        // Look up transaction in database
+        let tx = ctx.chain.db.get_transaction_by_hash(tx_hash)
+            .map_err(|e| jsonrpsee_error(&e.to_string()))?;
+
+        let result = match tx {
+            Some(t) => {
+                let stellar_url = t.stellar_tx_hash.as_ref().map(|h| {
+                    format!("https://stellar.expert/explorer/testnet/tx/{}", h)
+                });
+                serde_json::json!({
+                    "evmTxHash": t.hash,
+                    "stellarTxHash": t.stellar_tx_hash,
+                    "stellarExplorerUrl": stellar_url,
+                    "status": t.status.as_str(),
+                    "blockNumber": t.block_number
+                })
+            }
+            None => {
+                serde_json::json!({
+                    "evmTxHash": tx_hash,
+                    "error": "Transaction not found"
+                })
+            }
+        };
+        Ok::<serde_json::Value, jsonrpsee::types::ErrorObject<'static>>(result)
+    })?;
+
     // --- tva_account* methods (Account Registry) ---
 
     module.register_async_method("tva_getAccount", |params, ctx, _| async move {
